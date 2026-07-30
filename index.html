@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICR — Consola de Riesgo de Conductores</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:            #0b1220;
+  --bg-soft:       #0e1626;
+  --panel:         #131d33;
+  --panel-2:       #101a2e;
+  --panel-border:  rgba(255,255,255,0.07);
+  --panel-border-hi: rgba(255,255,255,0.14);
+  --text:          #e7edf7;
+  --text-dim:      #97a4bd;
+  --text-faint:    #5b6b85;
+  --amber:         #e8a020;
+  --amber2:        #f0b429;
+  --risk-alto:     #ef4444;
+  --risk-moderado: #f59e0b;
+  --risk-bajo:     #4ade80;
+  --risk-muybajo:  #166534;
+  --font-body:     'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-mono:     'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 18px;
+  --shadow: 0 8px 28px rgba(0,0,0,0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: radial-gradient(1200px 800px at 15% -10%, #14213a 0%, var(--bg) 55%);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+code { font-family: var(--font-mono); }
+
+/* ===== CONFIG GATE ===== */
+#configGate {
+  max-width: 460px; margin: 90px auto; background: var(--panel);
+  border: 1px solid var(--panel-border); border-radius: var(--radius-lg);
+  padding: 28px 30px; box-shadow: var(--shadow);
+}
+#configGate h2 { font-size: 17px; margin-bottom: 6px; }
+#configGate p { color: var(--text-dim); font-size: 13px; margin-bottom: 18px; }
+
+.ps-label { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; letter-spacing: .5px; text-transform: uppercase; }
+.ps-input, .ps-select {
+  width: 100%; background: var(--panel-2); border: 1.5px solid var(--panel-border);
+  border-radius: var(--radius-md); padding: 10px 14px; color: var(--text);
+  font-family: var(--font-body); font-size: 14px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.ps-input:focus, .ps-select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232,160,32,0.15); }
+.ps-input::placeholder { color: var(--text-faint); }
+
+.ps-btn {
+  padding: 10px 18px; border-radius: var(--radius-md); border: 1px solid var(--panel-border);
+  background: var(--panel-2); color: var(--text); font-family: var(--font-body); font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 8px;
+}
+.ps-btn:hover { border-color: var(--panel-border-hi); }
+.ps-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ps-btn-primary { background: linear-gradient(135deg, var(--amber), #c9770f); border: none; color: #1a1204; box-shadow: 0 4px 16px rgba(232,160,32,0.25); }
+.ps-btn-primary:hover { filter: brightness(1.08); }
+.ps-btn-ghost { background: transparent; }
+
+.ps-alert { border-radius: var(--radius-md); padding: 11px 15px; font-size: 13px; margin-bottom: 14px; border: 1px solid; }
+.ps-alert-info { background: rgba(56,189,248,0.08); color: #7dd3fc; border-color: rgba(56,189,248,0.25); }
+.ps-alert-warn { background: rgba(245,158,11,0.08); color: #fbbf24; border-color: rgba(245,158,11,0.25); }
+.ps-alert-danger { background: rgba(239,68,68,0.08); color: #fca5a5; border-color: rgba(239,68,68,0.25); }
+.ps-alert-ok { background: rgba(34,197,94,0.08); color: #86efac; border-color: rgba(34,197,94,0.25); }
+
+.hidden { display: none !important; }
+
+/* ===== SHELL ===== */
+#app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 264px; flex-shrink: 0; background: var(--bg-soft);
+  border-right: 1px solid var(--panel-border); padding: 22px 18px; display: flex; flex-direction: column; gap: 22px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; align-items: center; gap: 11px; }
+.brand img { width: 34px; height: 34px; border-radius: 8px; object-fit: contain; }
+.brand-name { font-size: 14.5px; font-weight: 700; letter-spacing: .2px; }
+.brand-sub { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; margin-top: 1px; }
+
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md);
+  color: var(--text-dim); font-size: 13.5px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
+  background: none; text-align: left; width: 100%;
+}
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.nav-item.active { background: rgba(232,160,32,0.12); color: var(--amber2); border-color: rgba(232,160,32,0.25); font-weight: 600; }
+.nav-item .ic { width: 18px; text-align: center; }
+
+.side-block { border-top: 1px solid var(--panel-border); padding-top: 18px; }
+.side-block-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-faint); margin-bottom: 10px; font-weight: 700; }
+
+.contract-quick { display: flex; gap: 8px; margin-bottom: 10px; }
+.contract-quick button {
+  flex: 1; font-size: 11px; padding: 5px 0; border-radius: 7px; border: 1px solid var(--panel-border);
+  background: var(--panel-2); color: var(--text-dim); cursor: pointer; font-family: var(--font-body);
+}
+.contract-quick button:hover { border-color: var(--panel-border-hi); color: var(--text); }
+.contract-count { font-family: var(--font-mono); font-weight: 400; color: var(--text-faint); font-size: 10.5px; text-transform: none; letter-spacing: 0; }
+
+.contract-list-scroll { display: flex; flex-direction: column; gap: 3px; max-height: 280px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+.contract-row {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 8px; cursor: pointer;
+  font-size: 12.5px; color: var(--text-dim); transition: background .12s, color .12s; border: 1px solid transparent;
+}
+.contract-row:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.contract-row.on { background: rgba(232,160,32,0.13); color: var(--amber2); font-weight: 600; border-color: rgba(232,160,32,0.22); }
+.contract-row.acumulado .lbl { font-weight: 700; }
+.contract-row.acumulado { border-bottom: 1px dashed var(--panel-border-hi); border-radius: 8px 8px 0 0; margin-bottom: 4px; padding-bottom: 10px; }
+.contract-row .box {
+  width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--panel-border-hi); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; color: #1a1204; background: transparent;
+}
+.contract-row.on .box { background: var(--amber); border-color: var(--amber); }
+.contract-row.on .box::after { content: '✓'; }
+.contract-row .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sidebar-stats { display: flex; flex-direction: column; gap: 10px; }
+.sb-stat { display: flex; justify-content: space-between; align-items: baseline; }
+.sb-stat .k { font-size: 12px; color: var(--text-dim); }
+.sb-stat .v { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--text); }
+
+.main-wrap { flex: 1; min-width: 0; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 18px 30px; border-bottom: 1px solid var(--panel-border); flex-wrap: wrap;
+}
+.topbar-title { font-size: 19px; font-weight: 700; }
+.topbar-sub { font-size: 12.5px; color: var(--text-faint); margin-top: 2px; }
+.topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+.content { padding: 26px 30px 60px; max-width: 1500px; }
+.ps-view { display: none; }
+.ps-view.active { display: block; }
+
+#topLoader { height: 3px; background: linear-gradient(90deg, var(--amber), #ffd580, var(--amber)); background-size: 200% 100%; animation: shimmer 1s linear infinite; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== KPI STRIP ===== */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-bottom: 26px; }
+.kpi-mini {
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.kpi-mini .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-faint); margin-bottom: 6px; }
+.kpi-mini .v { font-family: var(--font-mono); font-size: 22px; font-weight: 700; }
+.kpi-mini .v.alto { color: var(--risk-alto); }
+.kpi-mini .v.amber { color: var(--amber2); }
+.kpi-mini .sub { font-size: 10px; color: var(--text-faint); margin-top: 3px; }
+
+/* ===== CONTRACT CARDS ===== */
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+.section-title { font-size: 15.5px; font-weight: 700; }
+.section-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+
+.contract-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-bottom: 30px; }
+.contract-card {
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-lg);
+  padding: 18px; cursor: pointer; transition: border-color .15s, transform .15s; position: relative;
+}
+.contract-card:hover { border-color: var(--panel-border-hi); transform: translateY(-2px); }
+.contract-card.focus { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+.contract-card.acumulado { border: 1.5px solid rgba(232,160,32,0.45); background: linear-gradient(160deg, rgba(232,160,32,0.07), var(--panel)); }
+.contract-card.acumulado .name { color: var(--amber2); }
+.contract-card .name { font-size: 13.5px; font-weight: 700; margin-bottom: 2px; }
+.contract-card .n { font-size: 11px; color: var(--text-faint); margin-bottom: 12px; }
+.gauge-row { display: flex; align-items: center; gap: 14px; }
+.gauge-pct { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+.stackbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 12px; background: rgba(255,255,255,0.05); }
+.stackbar span { display: block; height: 100%; }
+.spark-wrap { margin-top: 10px; height: 28px; }
+.card-legend { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.card-legend .item { font-size: 10px; color: var(--text-faint); display: flex; align-items: center; gap: 4px; }
+.card-legend .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+/* ===== CONTENT PANELS ===== */
+.panel {
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-lg);
+  padding: 20px 22px; margin-bottom: 20px;
+}
+.panel-title { font-size: 14.5px; font-weight: 700; margin-bottom: 4px; }
+.panel-sub { font-size: 12px; color: var(--text-faint); margin-bottom: 16px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-wrap { position: relative; height: 300px; }
+.chart-wrap.small { height: 230px; }
+
+.toggle-row { display: inline-flex; background: var(--panel-2); border: 1px solid var(--panel-border); border-radius: 10px; padding: 3px; gap: 2px; }
+.toggle-btn { padding: 6px 12px; font-size: 12px; border-radius: 8px; background: none; border: none; color: var(--text-dim); cursor: pointer; font-family: var(--font-body); }
+.toggle-btn.on { background: var(--amber); color: #1a1204; font-weight: 700; }
+
+/* ===== TABLE ===== */
+.table-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.table-toolbar .f { min-width: 170px; flex: 1; }
+.table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--panel-border); }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th {
+  text-align: left; padding: 10px 14px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-faint); background: var(--panel-2); border-bottom: 1px solid var(--panel-border);
+  cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0;
+}
+table.data th:hover { color: var(--text); }
+table.data td { padding: 9px 14px; border-bottom: 1px solid var(--panel-border); white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; }
+table.data td.name-cell { font-family: var(--font-body); font-size: 13px; }
+table.data tr:hover td { background: rgba(255,255,255,0.02); }
+table.data tr.row-dispersion td { opacity: 0.55; }
+table.data tr.row-dispersion:hover td { opacity: 0.85; }
+
+.disp-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-family: var(--font-body); font-size: 11.5px; color: var(--text-faint); white-space: nowrap; }
+.disp-toggle input { width: 14px; height: 14px; accent-color: var(--amber); cursor: pointer; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10.5px; font-weight: 700; letter-spacing: .3px; }
+.badge-alto     { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.badge-moderado { background: rgba(245,158,11,0.15); color: #fcd34d; }
+.badge-bajo     { background: rgba(74,222,128,0.16); color: #86efac; }
+.badge-muybajo  { background: rgba(22,101,52,0.30); color: #4ade80; }
+.badge-gray     { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+
+/* ===== IMPORT ===== */
+.dropzone {
+  border: 2px dashed var(--panel-border); border-radius: var(--radius-lg); padding: 44px 20px; text-align: center;
+  color: var(--text-dim); cursor: pointer; transition: all .15s;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--amber); background: rgba(232,160,32,0.04); }
+.dropzone input { display: none; }
+
+/* ===== CONTRATOS TAB ===== */
+.checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap: 10px; }
+.check-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: var(--panel-2); }
+.check-item input { width: 16px; height: 16px; accent-color: var(--amber); cursor: pointer; }
+.check-item label { cursor: pointer; font-size: 13px; }
+
+.repeat-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px; }
+.repeat-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: var(--panel-2); }
+.repeat-row-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.repeat-row-bottom { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--panel-border); flex-wrap: wrap; }
+.repeat-row .who { flex: 1; min-width: 0; }
+.repeat-row .who .nm { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repeat-row .who .ct { font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repeat-row .streak { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.repeat-dot { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.repeat-dot .m { font-size: 8.5px; color: var(--text-faint); }
+.repeat-count { font-family: var(--font-mono); font-weight: 700; font-size: 13px; color: var(--amber2); flex-shrink: 0; min-width: 44px; text-align: right; }
+
+.action-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--panel-border); white-space: nowrap; }
+.action-pill-empty { color: var(--text-faint); background: transparent; }
+.action-select { max-width: 170px; font-size: 12px; padding: 6px 10px; margin-left: auto; }
+.action-date { max-width: 150px; font-size: 12px; padding: 6px 10px; }
+
+.empty-state { text-align: center; padding: 50px 20px; color: var(--text-faint); }
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a3752; border-radius: 4px; }
+
+@media (max-width: 900px) {
+  #app { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; flex-wrap: wrap; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .content { padding: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div id="configGate">
+  <h2>⚙️ Conexión a Supabase</h2>
+  <p>Pegá la URL y la anon key (legacy JWT, <code>eyJ...</code>) de tu proyecto. Quedan guardadas solo en este navegador.</p>
+  <div style="margin-bottom:12px;">
+    <label class="ps-label">Supabase URL</label>
+    <input class="ps-input" id="cfgUrl" placeholder="https://xxxxx.supabase.co">
+  </div>
+  <div style="margin-bottom:16px;">
+    <label class="ps-label">Anon Key</label>
+    <input class="ps-input" id="cfgKey" placeholder="eyJhbGciOi...">
+  </div>
+  <button class="ps-btn ps-btn-primary" onclick="saveConfig()">Conectar</button>
+  <div id="cfgError" class="ps-alert ps-alert-danger hidden" style="margin-top:12px;"></div>
+</div>
+
+<div id="app" class="hidden">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="data:image/png;base64,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" alt="PETROSAR">
+      <div>
+        <div class="brand-name">ICR Control</div>
+        <div class="brand-sub">Riesgo de conductores</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard"><span class="ic">◈</span> Panel general</button>
+      <button class="nav-item" data-view="import"><span class="ic">⇪</span> Importar mes</button>
+      <button class="nav-item" data-view="acciones"><span class="ic">📋</span> Acciones</button>
+      <button class="nav-item" data-view="contratos"><span class="ic">▤</span> Contratos</button>
+    </nav>
+
+    <div class="side-block" id="monthBlock">
+      <div class="side-block-title">Período</div>
+      <select class="ps-select" id="selMonth"></select>
+    </div>
+
+    <div class="side-block" id="contractBlock">
+      <div class="side-block-title">Contratos incluidos <span class="contract-count" id="contractCountLabel"></span></div>
+      <div class="contract-quick">
+        <button onclick="toggleAllContratos(true)">Todos</button>
+        <button onclick="toggleAllContratos(false)">Ninguno</button>
+      </div>
+      <div class="contract-list-scroll" id="contractChips"></div>
+    </div>
+
+    <div class="side-block" id="statsBlock">
+      <div class="side-block-title">Histórico</div>
+      <div class="sidebar-stats" id="sidebarStats"></div>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <div id="topLoader" class="hidden"></div>
+
+    <div class="topbar">
+      <div>
+        <div class="topbar-title" id="topbarTitle">Panel general</div>
+        <div class="topbar-sub" id="topbarSub">—</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="ps-btn ps-btn-ghost" onclick="loadAll(true)">↻ Refrescar</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ================= DASHBOARD ================= -->
+      <section class="ps-view active" id="view-dashboard">
+
+        <div id="dashEmpty" class="panel hidden">
+          <div class="empty-state">Sin datos para los contratos seleccionados.<br>Importá el primer mes desde <b>Importar mes</b>.</div>
+        </div>
+
+        <div id="dashContent">
+          <div class="kpi-strip" id="kpiGrid"></div>
+
+          <div class="section-head">
+            <div>
+              <div class="section-title">Comparativo por contrato</div>
+              <div class="section-sub">% de riesgo Moderado + Alto, distribución y tendencia — mes seleccionado. Clic en una tarjeta para filtrar el detalle.</div>
+            </div>
+            <button class="ps-btn ps-btn-ghost" id="clearFocusBtn" onclick="setFocusContrato(null)" style="display:none;">✕ Quitar foco</button>
+          </div>
+          <div class="contract-grid" id="contractCards"></div>
+
+          <div class="grid-2">
+            <div class="panel">
+              <div class="section-head" style="margin-bottom:6px;">
+                <div class="panel-title" style="margin-bottom:0;">Desempeño mensual</div>
+                <div class="toggle-row" id="trendToggle">
+                  <button class="toggle-btn on" data-mode="categoria">Por categoría</button>
+                  <button class="toggle-btn" data-mode="contrato">Por contrato</button>
+                </div>
+              </div>
+              <div class="panel-sub" id="trendSub">Choferes por categoría de riesgo, todos los meses</div>
+              <div class="chart-wrap"><canvas id="chartRiskTrend"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-title">Choferes reincidentes</div>
+              <div class="panel-sub">Alto o Moderado en 2 o más meses consecutivos (histórico, contratos seleccionados)</div>
+              <div id="repeatOffendersWrap"></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">Detalle por chofer</div>
+            <div class="panel-sub" id="tableSub">Mes seleccionado</div>
+            <div class="table-toolbar">
+              <div class="f" style="flex:2;min-width:220px;">
+                <input class="ps-input" id="searchDriver" placeholder="Buscar por nombre o CUIL…" oninput="renderDriverTable()">
+              </div>
+              <div class="f">
+                <select class="ps-select" id="filterContrato" onchange="renderDriverTable()"><option value="">Todos los contratos</option></select>
+              </div>
+              <div class="f">
+                <select class="ps-select" id="filterRisk" onchange="renderDriverTable()">
+                  <option value="">Todas las categorías</option>
+                  <option value="Alto">Alto</option>
+                  <option value="Moderado">Moderado</option>
+                  <option value="Bajo">Bajo</option>
+                  <option value="Muy bajo">Muy bajo</option>
+                </select>
+              </div>
+              <div class="f">
+                <select class="ps-select" id="filterDispersion" onchange="renderDriverTable()">
+                  <option value="">Todos</option>
+                  <option value="no">Sin marcar</option>
+                  <option value="si">Solo marcados (dispersión)</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data" id="driverTable">
+                <thead>
+                  <tr>
+                    <th data-key="apellido_nombre">Chofer</th>
+                    <th data-key="cuil">CUIL</th>
+                    <th data-key="contrato">Contrato</th>
+                    <th data-key="icr_categoria">Categoría</th>
+                    <th data-key="suma_distancia_km">Km</th>
+                    <th data-key="q_exceso_vel">Excesos vel.</th>
+                    <th data-key="q_incidentes">Incidentes</th>
+                    <th data-key="q_dias_conduccion">Días cond.</th>
+                    <th>Dispersión</th>
+                  </tr>
+                </thead>
+                <tbody id="driverTableBody"></tbody>
+              </table>
+            </div>
+            <div id="driverTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= IMPORTAR ================= -->
+      <section class="ps-view" id="view-import">
+        <div class="panel">
+          <div class="panel-title">Importar mes nuevo</div>
+          <div class="panel-sub">Subí el archivo tal cual lo manda el sistema de GPS. El contrato de cada chofer se busca automáticamente por CUIL en la nómina.</div>
+          <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+            <div style="font-size:30px;margin-bottom:8px;">⇪</div>
+            <div><b>Hacé clic o arrastrá el archivo acá</b></div>
+            <div style="font-size:12px;margin-top:4px;color:var(--text-faint);">.xlsx, .xls o .csv</div>
+          </div>
+          <div id="importStatus" style="margin-top:14px;"></div>
+        </div>
+        <div id="importPreview"></div>
+      </section>
+
+      <!-- ================= ACCIONES ================= -->
+      <section class="ps-view" id="view-acciones">
+        <div class="panel">
+          <div class="panel-title">Historial de acciones</div>
+          <div class="panel-sub">Todas las acciones registradas sobre choferes reincidentes</div>
+          <div class="table-toolbar" style="margin-bottom:14px;">
+            <div class="f" style="flex:2;min-width:220px;">
+              <input class="ps-input" id="searchAccion" placeholder="Buscar por nombre o CUIL…" oninput="renderAccionesTab()">
+            </div>
+            <div class="f">
+              <select class="ps-select" id="filterTipoAccion" onchange="renderAccionesTab()">
+                <option value="">Todas las acciones</option>
+                <option value="Feedback">Feedback</option>
+                <option value="Formulario cliente">Formulario cliente</option>
+                <option value="Recapacitación">Recapacitación</option>
+                <option value="Inhabilitación">Inhabilitación</option>
+              </select>
+            </div>
+            <div class="f">
+              <label class="ps-label">Desde</label>
+              <select class="ps-select" id="filterAccionDesde" onchange="renderAccionesTab()"></select>
+            </div>
+            <div class="f">
+              <label class="ps-label">Hasta</label>
+              <select class="ps-select" id="filterAccionHasta" onchange="renderAccionesTab()"></select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="accionesTable">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Chofer</th>
+                  <th>CUIL</th>
+                  <th>Contrato</th>
+                  <th>Acción</th>
+                  <th>Mes de referencia</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="accionesTableBody"></tbody>
+            </table>
+          </div>
+          <div id="accionesTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
+        </div>
+      </section>
+
+      <!-- ================= CONTRATOS ================= -->
+      <section class="ps-view" id="view-contratos">
+        <div class="panel">
+          <div class="panel-title">Contratos incluidos en el panel</div>
+          <div class="panel-sub">Solo los conductores cuyo contrato esté tildado se cuentan en el panel general.</div>
+          <div class="checklist" id="contractChecklist"></div>
+          <div style="margin-top:20px;">
+            <button class="ps-btn ps-btn-primary" onclick="saveContratos()">Guardar selección</button>
+            <span id="contratosSaveMsg" style="margin-left:12px;font-size:13px;color:var(--risk-bajo);"></span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+let CONFIG = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' };
+
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('icr_supabase_config') || 'null');
+    if (saved && saved.SUPABASE_URL && saved.SUPABASE_ANON_KEY) { CONFIG = saved; return true; }
+  } catch(e) {}
+  return false;
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfgUrl').value.trim().replace(/\/+$/, '');
+  const key = document.getElementById('cfgKey').value.trim();
+  const err = document.getElementById('cfgError');
+  if (!/^https:\/\/.+\.supabase\.co$/.test(url)) {
+    err.textContent = 'La URL debe tener la forma https://xxxxx.supabase.co (sin nada más al final).';
+    err.classList.remove('hidden');
+    return;
+  }
+  if (!key || key.length < 20) {
+    err.textContent = 'Pegá la anon key completa.';
+    err.classList.remove('hidden');
+    return;
+  }
+  CONFIG = { SUPABASE_URL: url, SUPABASE_ANON_KEY: key };
+  localStorage.setItem('icr_supabase_config', JSON.stringify(CONFIG));
+  document.getElementById('configGate').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  boot();
+}
+
+/* ============================================================
+   SUPABASE REST
+   ============================================================ */
+async function sb(path, opts = {}) {
+  const url = CONFIG.SUPABASE_URL + '/rest/v1/' + path;
+  const headers = Object.assign({
+    'apikey': CONFIG.SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+    'Content-Type': 'application/json'
+  }, opts.headers || {});
+  const res = await fetch(url, Object.assign({}, opts, { headers }));
+  if (!res.ok) { const txt = await res.text().catch(()=> ''); throw new Error('Supabase ' + res.status + ': ' + txt); }
+  if (res.status === 204) return null;
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+// PostgREST devuelve como máximo 1000 filas por pedido (límite por defecto del proyecto).
+// Esta función pagina con el header Range hasta traer TODAS las filas, sin importar cuánto crezca la tabla.
+async function sbAll(path, pageSize = 1000) {
+  let out = [];
+  let from = 0;
+  while (true) {
+    const url = CONFIG.SUPABASE_URL + '/rest/v1/' + path;
+    const headers = {
+      'apikey': CONFIG.SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + CONFIG.SUPABASE_ANON_KEY,
+      'Range-Unit': 'items',
+      'Range': `${from}-${from + pageSize - 1}`
+    };
+    const res = await fetch(url, { headers });
+    if (!res.ok && res.status !== 206) { const txt = await res.text().catch(()=> ''); throw new Error('Supabase ' + res.status + ': ' + txt); }
+    const chunk = await res.json();
+    out = out.concat(chunk);
+    if (chunk.length < pageSize) break;
+    from += pageSize;
+  }
+  return out;
+}
+function showLoader(v) { document.getElementById('topLoader').classList.toggle('hidden', !v); }
+
+/* ============================================================
+   ESTADO
+   ============================================================ */
+const state = {
+  registros: [], personal: [], personalByCuit: {}, contratos: [], acciones: [],
+  selectedContratos: new Set(),
+  selectedMonth: null,
+  focusContrato: null,
+  trendMode: 'categoria',
+  sortKey: 'icr_categoria', sortDir: 1,
+  pendingImport: null
+};
+
+const ACTION_TYPES = ['Feedback', 'Formulario cliente', 'Recapacitación', 'Inhabilitación'];
+const ACTION_COLOR = { 'Feedback':'#38bdf8', 'Formulario cliente':'#2dd4bf', 'Recapacitación':'#f59e0b', 'Inhabilitación':'#ef4444' };
+
+const RISK_ORDER = ['Alto','Moderado','Bajo','Muy bajo'];
+const RISK_COLOR = { 'Alto':'#ef4444', 'Moderado':'#f59e0b', 'Bajo':'#4ade80', 'Muy bajo':'#166534' };
+const RISK_BADGE = { 'Alto':'badge-alto', 'Moderado':'badge-moderado', 'Bajo':'badge-bajo', 'Muy bajo':'badge-muybajo' };
+const CONTRACT_PALETTE = ['#e8a020','#38bdf8','#a78bfa','#22c55e','#f472b6','#fb923c','#2dd4bf','#f87171'];
+function contractColor(name, list) { if (name === ACUMULADO_KEY) return '#e8a020'; const i = list.indexOf(name); return CONTRACT_PALETTE[i % CONTRACT_PALETTE.length]; }
+
+// "ACUMULADO" no es un contrato real: es la suma/promedio de estos cuatro
+const ACUMULADO_KEY = 'ACUMULADO';
+const ACUMULADO_SOURCES = ['Transporte PAE','Transporte PS','Transporte BAKER','Transporte NOVOMET'];
+function contractRows(name, rows) {
+  return name === ACUMULADO_KEY ? rows.filter(r => ACUMULADO_SOURCES.includes(r.contrato)) : rows.filter(r => r.contrato === name);
+}
+function orderedContratos(list) {
+  return list.slice().sort((a,b) => (a===ACUMULADO_KEY?-1:0) - (b===ACUMULADO_KEY?-1:0));
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+async function boot() {
+  document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => switchView(item.dataset.view)));
+  document.querySelectorAll('#driverTable th[data-key]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.key;
+    if (state.sortKey === k) state.sortDir *= -1; else { state.sortKey = k; state.sortDir = 1; }
+    renderDriverTable();
+  }));
+  document.querySelectorAll('#trendToggle .toggle-btn').forEach(btn => btn.addEventListener('click', () => {
+    state.trendMode = btn.dataset.mode;
+    document.querySelectorAll('#trendToggle .toggle-btn').forEach(b => b.classList.toggle('on', b === btn));
+    document.getElementById('trendSub').textContent = state.trendMode === 'categoria'
+      ? 'Choferes por categoría de riesgo, todos los meses'
+      : '% de riesgo Moderado + Alto por contrato, todos los meses';
+    renderDashboard();
+  }));
+  setupDropzone();
+  await loadAll(false);
+}
+
+function switchView(view) {
+  document.querySelectorAll('.nav-item').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  document.querySelectorAll('.ps-view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  const titles = { dashboard: 'Panel general', import: 'Importar mes', acciones: 'Acciones', contratos: 'Contratos' };
+  const subs = { dashboard: 'Desempeño de conductores por contrato y período', import: 'Cargar el archivo mensual del sistema de GPS', acciones: 'Historial de acciones sobre choferes reincidentes', contratos: 'Definir qué contratos entran al panel' };
+  document.getElementById('topbarTitle').textContent = titles[view];
+  document.getElementById('topbarSub').textContent = subs[view];
+  document.getElementById('monthBlock').classList.toggle('hidden', view !== 'dashboard');
+  document.getElementById('contractBlock').classList.toggle('hidden', view !== 'dashboard');
+}
+
+async function loadAll(manual) {
+  showLoader(true);
+  try {
+    const [registros, personal, contratos, acciones] = await Promise.all([
+      sbAll('icr_registros?select=*&order=anio_mes.asc'),
+      sbAll('icr_personal?select=cuit,nombre,contrato'),
+      sb('icr_contratos_filtro?select=*&order=contrato.asc'),
+      sb('icr_acciones?select=*&order=creado_en.desc')
+    ]);
+    state.registros = registros || [];
+    state.personal = personal || [];
+    state.personalByCuit = {};
+    state.personal.forEach(p => state.personalByCuit[p.cuit] = p);
+    state.contratos = contratos || [];
+    state.acciones = acciones || [];
+    state.selectedContratos = new Set(state.contratos.filter(c => c.seleccionado).map(c => c.contrato));
+
+    renderContractChips();
+    renderContractChecklist();
+    renderSidebarStats();
+    populateMonthSelect();
+    populateContratoFilterSelect();
+    renderDashboard();
+    renderAccionesTab();
+  } catch (e) {
+    console.error(e);
+    alert('Error cargando datos de Supabase: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+/* ============================================================
+   FILTROS BASE
+   ============================================================ */
+function filteredRegistros() {
+  if (state.selectedContratos.size === 0) return state.registros;
+  return state.registros.filter(r => state.selectedContratos.has(r.contrato));
+}
+function availableMonths() { return Array.from(new Set(filteredRegistros().map(r => r.anio_mes))).sort(); }
+
+function fmtMonth(anioMes) {
+  if (anioMes === 'ALL') return 'Todos los meses';
+  const s = String(anioMes); const y = s.slice(0,4), m = parseInt(s.slice(4,6));
+  const meses = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return meses[m] + ' ' + y;
+}
+function rowsForSelectedMonth(rows) {
+  return state.selectedMonth === 'ALL' ? rows : rows.filter(r => r.anio_mes === state.selectedMonth);
+}
+function num(v) { return typeof v === 'number' ? v : parseFloat(v) || 0; }
+
+function populateMonthSelect() {
+  const months = availableMonths(); const sel = document.getElementById('selMonth'); const prev = state.selectedMonth;
+  sel.innerHTML = `<option value="ALL">Todos los meses</option>` + months.map(m => `<option value="${m}">${fmtMonth(m)}</option>`).join('');
+  if (months.length === 0) { state.selectedMonth = null; return; }
+  state.selectedMonth = (prev === 'ALL' || (prev && months.includes(prev))) ? prev : months[months.length - 1];
+  sel.value = state.selectedMonth;
+  sel.onchange = () => { state.selectedMonth = sel.value === 'ALL' ? 'ALL' : parseInt(sel.value); renderDashboard(); };
+}
+
+function populateContratoFilterSelect() {
+  const sel = document.getElementById('filterContrato');
+  const contracts = orderedContratos(state.contratos.map(c => c.contrato));
+  sel.innerHTML = '<option value="">Todos los contratos</option>' + contracts.map(c => `<option value="${c}">${c === ACUMULADO_KEY ? '∑ ACUMULADO' : c}</option>`).join('');
+}
+
+/* ============================================================
+   SIDEBAR: chips de contrato + stats
+   ============================================================ */
+function renderContractChips() {
+  const el = document.getElementById('contractChips');
+  el.innerHTML = orderedContratos(state.contratos.map(c=>c.contrato)).map(name => {
+    const on = state.selectedContratos.has(name);
+    const isAcum = name === ACUMULADO_KEY;
+    return `<div class="contract-row ${on ? 'on' : ''} ${isAcum ? 'acumulado' : ''}" onclick="toggleContratoChip('${name.replace(/'/g,"\\'")}')">
+      <span class="box"></span><span class="lbl">${isAcum ? '∑ ACUMULADO' : name}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('contractCountLabel').textContent = `${state.selectedContratos.size}/${state.contratos.length}`;
+}
+function toggleContratoChip(name) {
+  if (state.selectedContratos.has(name)) state.selectedContratos.delete(name); else state.selectedContratos.add(name);
+  renderContractChips();
+  populateMonthSelect();
+  renderDashboard();
+}
+function toggleAllContratos(val) {
+  state.selectedContratos = val ? new Set(state.contratos.map(c => c.contrato)) : new Set();
+  renderContractChips();
+  populateMonthSelect();
+  renderDashboard();
+}
+
+function renderSidebarStats() {
+  const rows = filteredRegistros();
+  const months = availableMonths();
+  const totalChoferes = new Set(rows.map(r => r.cuil)).size;
+  document.getElementById('sidebarStats').innerHTML = `
+    <div class="sb-stat"><span class="k">Meses cargados</span><span class="v">${months.length}</span></div>
+    <div class="sb-stat"><span class="k">Choferes históricos</span><span class="v">${totalChoferes}</span></div>
+    <div class="sb-stat"><span class="k">Registros totales</span><span class="v">${rows.length}</span></div>
+  `;
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function setFocusContrato(name) {
+  state.focusContrato = name;
+  document.getElementById('clearFocusBtn').style.display = name ? 'inline-flex' : 'none';
+  document.getElementById('filterContrato').value = name || '';
+  renderContractCardsHighlight();
+  renderDriverTable();
+}
+
+function renderDashboard() {
+  const rows = filteredRegistros();
+  const months = availableMonths();
+  document.getElementById('dashEmpty').classList.toggle('hidden', rows.length > 0);
+  document.getElementById('dashContent').classList.toggle('hidden', rows.length === 0);
+  if (rows.length === 0) return;
+
+  const monthRowsAll = rowsForSelectedMonth(rows);
+  const monthRowsClean = monthRowsAll.filter(r => !r.es_dispersion);
+  const rowsClean = rows.filter(r => !r.es_dispersion);
+
+  document.getElementById('topbarSub').textContent = fmtMonth(state.selectedMonth) + ' · ' + monthRowsClean.length + ' conductores evaluados';
+
+  renderKpiCards(monthRowsClean, monthRowsAll);
+  renderContractCards(monthRowsClean, rowsClean, months);
+  renderRiskTrendChart(rowsClean, months);
+  renderRepeatOffenders(rowsClean, months);
+  renderDriverTable();
+}
+
+function renderKpiCards(monthRows, monthRowsAll) {
+  const total = monthRows.length;
+  const km = monthRows.reduce((s,r)=> s + num(r.suma_distancia_km), 0);
+  const excesos = monthRows.reduce((s,r)=> s + num(r.q_exceso_vel), 0);
+  const incidentes = monthRows.reduce((s,r)=> s + num(r.q_incidentes), 0);
+  const modAlto = monthRows.filter(r => r.icr_categoria === 'Alto' || r.icr_categoria === 'Moderado').length;
+  const pctRiesgo = total ? (modAlto/total*100) : 0;
+  const excesosPor1000km = km ? (excesos/km*1000) : 0;
+  const promExcesosChofer = total ? (excesos/total) : 0;
+  const flagged = monthRowsAll.length - monthRows.length;
+  const pctDispersion = monthRowsAll.length ? (flagged/monthRowsAll.length*100) : 0;
+
+  const cards = [
+    { k: state.selectedMonth === 'ALL' ? 'Evaluaciones (todos los meses)' : 'Conductores', v: total, cls:'' },
+    { k:'Km recorridos', v: km.toLocaleString('es-AR',{maximumFractionDigits:0}), cls:'' },
+    { k:'Excesos velocidad', v: excesos.toLocaleString('es-AR'), cls:'amber' },
+    { k:'Excesos /1000km', v: excesosPor1000km.toFixed(2), cls:'' },
+    { k:'% Riesgo Mod.+Alto', v: pctRiesgo.toFixed(1)+'%', cls: pctRiesgo > 20 ? 'alto' : 'amber' },
+    { k:'Prom. excesos/chofer', v: promExcesosChofer.toFixed(1), cls:'' },
+    { k:'% Dispersión de datos', v: pctDispersion.toFixed(1)+'%', cls: flagged ? 'amber' : '', sub: flagged + ' de ' + monthRowsAll.length + ' marcados' },
+  ];
+  document.getElementById('kpiGrid').innerHTML = cards.map(c => `
+    <div class="kpi-mini"><div class="k">${c.k}</div><div class="v ${c.cls}">${c.v}</div>${c.sub ? `<div class="sub">${c.sub}</div>` : ''}</div>`).join('');
+}
+
+/* ---- gauges / sparklines ---- */
+function severityColor(pct) {
+  if (pct >= 30) return RISK_COLOR['Alto'];
+  if (pct >= 15) return RISK_COLOR['Moderado'];
+  if (pct >= 5)  return RISK_COLOR['Bajo'];
+  return RISK_COLOR['Muy bajo'];
+}
+
+function gaugeSVG(pct) {
+  const p = Math.max(0, Math.min(100, pct));
+  const R = 42, CX = 50, CY = 50, circumference = Math.PI * R;
+  const dash = (p/100) * circumference;
+  const color = severityColor(p);
+  return `
+  <svg width="88" height="52" viewBox="0 0 100 58">
+    <path d="M 8 50 A ${R} ${R} 0 0 1 92 50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M 8 50 A ${R} ${R} 0 0 1 92 50" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round"
+      stroke-dasharray="${dash.toFixed(1)} ${circumference.toFixed(1)}"/>
+  </svg>`;
+}
+
+function sparklineSVG(values, color) {
+  if (!values.length) return '';
+  const w = 200, h = 28, max = Math.max(...values, 1), min = Math.min(...values, 0);
+  const range = (max - min) || 1;
+  const step = values.length > 1 ? w / (values.length - 1) : 0;
+  const pts = values.map((v,i) => `${(i*step).toFixed(1)},${(h - ((v-min)/range)*h).toFixed(1)}`).join(' ');
+  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function renderContractCards(monthRows, allFilteredRows, months) {
+  const contractsInPlay = orderedContratos(state.contratos.map(c => c.contrato).filter(name => state.selectedContratos.has(name)));
+  const el = document.getElementById('contractCards');
+
+  if (!contractsInPlay.length) { el.innerHTML = '<div class="empty-state">Elegí al menos un contrato en la barra lateral.</div>'; return; }
+
+  el.innerHTML = contractsInPlay.map(name => {
+    const rowsC = contractRows(name, monthRows);
+    const total = rowsC.length;
+    const modAlto = rowsC.filter(r => r.icr_categoria === 'Alto' || r.icr_categoria === 'Moderado').length;
+    const pct = total ? (modAlto/total*100) : 0;
+    const counts = RISK_ORDER.map(cat => rowsC.filter(r => r.icr_categoria === cat).length);
+
+    const trend = months.map(m => {
+      const rm = contractRows(name, allFilteredRows.filter(r => r.anio_mes === m));
+      if (!rm.length) return 0;
+      const ma = rm.filter(r => r.icr_categoria==='Alto'||r.icr_categoria==='Moderado').length;
+      return ma/rm.length*100;
+    });
+
+    const isAcum = name === ACUMULADO_KEY;
+    return `
+    <div class="contract-card ${isAcum ? 'acumulado' : ''} ${state.focusContrato === name ? 'focus' : ''}" onclick="setFocusContrato('${name.replace(/'/g,"\\'")}')" data-contract="${name}">
+      <div class="name">${isAcum ? '∑ ACUMULADO' : name}</div>
+      <div class="n">${isAcum ? 'Suma de PAE + PS + BAKER + NOVOMET · ' : ''}${total} conductores evaluados</div>
+      <div class="gauge-row">
+        ${gaugeSVG(pct)}
+        <div>
+          <div class="gauge-pct" style="color:${severityColor(pct)}">${pct.toFixed(0)}%</div>
+          <div style="font-size:10px;color:var(--text-faint);">riesgo mod.+alto</div>
+        </div>
+      </div>
+      <div class="stackbar">
+        ${RISK_ORDER.map((cat,i) => total ? `<span style="width:${counts[i]/total*100}%;background:${RISK_COLOR[cat]}"></span>` : '').join('')}
+      </div>
+      <div class="spark-wrap">${sparklineSVG(trend, severityColor(pct))}</div>
+      <div style="font-size:9.5px;color:var(--text-faint);margin-top:2px;">tendencia % riesgo</div>
+    </div>`;
+  }).join('');
+}
+
+function renderContractCardsHighlight() {
+  document.querySelectorAll('.contract-card').forEach(card => {
+    card.classList.toggle('focus', card.dataset.contract === state.focusContrato);
+  });
+}
+
+/* ---- charts ---- */
+let chartRiskTrend;
+
+function renderRiskTrendChart(rows, months) {
+  const labels = months.map(fmtMonth);
+  const ctx = document.getElementById('chartRiskTrend');
+  if (chartRiskTrend) chartRiskTrend.destroy();
+
+  const isCategoria = state.trendMode === 'categoria';
+  let datasets, stacked;
+
+  if (isCategoria) {
+    stacked = true;
+    datasets = RISK_ORDER.map(cat => ({
+      label: cat, data: months.map(m => rows.filter(r=>r.anio_mes===m && r.icr_categoria===cat).length),
+      backgroundColor: RISK_COLOR[cat], borderRadius: 4, maxBarThickness: 42
+    }));
+  } else {
+    stacked = false;
+    const contracts = orderedContratos(state.contratos.map(c=>c.contrato).filter(c => state.selectedContratos.has(c)));
+    datasets = contracts.map(c => ({
+      label: c === ACUMULADO_KEY ? '∑ ACUMULADO' : c,
+      data: months.map(m => {
+        const rm = contractRows(c, rows.filter(r=>r.anio_mes===m));
+        if (!rm.length) return null;
+        const ma = rm.filter(r=>r.icr_categoria==='Alto'||r.icr_categoria==='Moderado').length;
+        return +(ma/rm.length*100).toFixed(1);
+      }),
+      borderColor: contractColor(c, contracts), backgroundColor: contractColor(c, contracts),
+      tension: 0.35, fill: false, borderWidth: c === ACUMULADO_KEY ? 3.5 : 2.5, pointRadius: 3, pointBackgroundColor: contractColor(c, contracts)
+    }));
+  }
+
+  chartRiskTrend = new Chart(ctx, {
+    type: isCategoria ? 'bar' : 'line',
+    data: { labels, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ color:'#97a4bd', boxWidth:10, font:{size:11} } } },
+      scales:{
+        y:{ stacked, beginAtZero:true, ticks:{color:'#5b6b85'}, grid:{color:'rgba(255,255,255,0.05)'}, title: !isCategoria ? {display:true,text:'% riesgo',color:'#5b6b85'} : undefined },
+        x:{ stacked, ticks:{color:'#5b6b85'}, grid:{color:'rgba(255,255,255,0.03)'} }
+      }
+    }
+  });
+}
+
+function computeRepeatOffenders(rows, months) {
+  const byDriver = {};
+  rows.forEach(r => {
+    if (!byDriver[r.cuil]) byDriver[r.cuil] = { nombre: r.apellido_nombre, contrato: r.contrato, byMonth: {} };
+    byDriver[r.cuil].byMonth[r.anio_mes] = r.icr_categoria;
+    byDriver[r.cuil].nombre = r.apellido_nombre;
+    byDriver[r.cuil].contrato = r.contrato;
+  });
+
+  const results = [];
+  Object.entries(byDriver).forEach(([cuil, d]) => {
+    // Racha ACTUAL: se corta apenas hay un mes evaluado que no sea Alto/Moderado (o un mes sin datos).
+    // Si mejoró, la racha queda en 0 y deja de aparecer, aunque haya tenido una mala racha en el pasado.
+    let run = [];
+    months.forEach(m => {
+      const cat = d.byMonth[m];
+      if (cat === 'Alto' || cat === 'Moderado') run.push({ m, cat });
+      else run = [];
+    });
+    if (run.length >= 2) results.push({ cuil, nombre: d.nombre, contrato: d.contrato, run });
+  });
+
+  results.sort((a,b) => b.run.length - a.run.length || String(a.nombre).localeCompare(String(b.nombre)));
+  return results;
+}
+
+function latestAccionFor(cuil) {
+  return state.acciones.find(a => a.cuil === cuil) || null;
+}
+
+function fmtFecha(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function todayISO() { return new Date().toISOString().slice(0,10); }
+
+function renderRepeatOffenders(rows, months) {
+  const offenders = computeRepeatOffenders(rows, months);
+  const el = document.getElementById('repeatOffendersWrap');
+  if (!offenders.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:24px;">Sin choferes en Alto/Moderado durante 2 o más meses seguidos 🎉</div>';
+    return;
+  }
+  el.innerHTML = `<div class="repeat-list">${offenders.map(o => {
+    const latest = latestAccionFor(o.cuil);
+    const anioMesHasta = o.run[o.run.length - 1].m;
+    const uid = 'acc_' + o.cuil;
+    return `
+    <div class="repeat-row">
+      <div class="repeat-row-top">
+        <div class="who">
+          <div class="nm">${o.nombre||''}</div>
+          <div class="ct">${o.contrato||'Sin contrato'} · CUIL ${o.cuil}</div>
+        </div>
+        <div class="streak">
+          ${o.run.map(step => `<div class="repeat-dot"><span class="badge ${RISK_BADGE[step.cat]}">${step.cat==='Moderado'?'Mod':step.cat}</span><span class="m">${fmtMonth(step.m)}</span></div>`).join('<span style="color:var(--text-faint);">→</span>')}
+        </div>
+        <div class="repeat-count">${o.run.length} meses</div>
+      </div>
+      <div class="repeat-row-bottom">
+        ${latest
+          ? `<span class="action-pill" style="background:${ACTION_COLOR[latest.accion]}22;color:${ACTION_COLOR[latest.accion]};border-color:${ACTION_COLOR[latest.accion]}55;">${latest.accion} · ${fmtFecha(latest.creado_en)}</span>`
+          : `<span class="action-pill action-pill-empty">Sin acción registrada</span>`}
+        <select class="ps-select action-select" id="sel_${uid}">
+          <option value="">Acción…</option>
+          ${ACTION_TYPES.map(a => `<option value="${a}">${a}</option>`).join('')}
+        </select>
+        <input type="date" class="ps-input action-date" id="date_${uid}" value="${todayISO()}">
+        <button class="ps-btn ps-btn-ghost" style="padding:7px 12px;font-size:12px;" onclick="registrarAccion('${uid}', ${o.cuil}, '${String(o.nombre||'').replace(/'/g,"\\'")}', '${String(o.contrato||'').replace(/'/g,"\\'")}', ${anioMesHasta})">Guardar</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function registrarAccion(uid, cuil, nombre, contrato, anioMesHasta) {
+  const selEl = document.getElementById('sel_' + uid);
+  const dateEl = document.getElementById('date_' + uid);
+  const accion = selEl.value;
+  const fecha = dateEl.value;
+  if (!accion) { alert('Elegí qué acción se tomó.'); return; }
+  if (!fecha) { alert('Elegí la fecha de la acción.'); return; }
+  showLoader(true);
+  try {
+    await sb('icr_acciones', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify([{ cuil, apellido_nombre: nombre, contrato, accion, anio_mes_hasta: anioMesHasta, creado_en: fecha + 'T12:00:00' }])
+    });
+    state.acciones = await sb('icr_acciones?select=*&order=creado_en.desc') || [];
+    renderDashboard();
+    renderAccionesTab();
+  } catch (e) {
+    alert('No se pudo registrar la acción: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+/* ---- pestaña Acciones (historial completo) ---- */
+function yyyymmFromISO(iso) {
+  if (!iso) return null;
+  return parseInt(String(iso).slice(0,4) + String(iso).slice(5,7));
+}
+
+function populateAccionPeriodSelects() {
+  const yms = Array.from(new Set(state.acciones.map(a => yyyymmFromISO(a.creado_en)).filter(Boolean))).sort();
+  const desdeSel = document.getElementById('filterAccionDesde');
+  const hastaSel = document.getElementById('filterAccionHasta');
+  if (!desdeSel || !hastaSel) return;
+  const prevDesde = desdeSel.value, prevHasta = hastaSel.value;
+  const opts = '<option value="">Todo</option>' + yms.map(m => `<option value="${m}">${fmtMonth(m)}</option>`).join('');
+  desdeSel.innerHTML = opts;
+  hastaSel.innerHTML = opts;
+  desdeSel.value = yms.includes(parseInt(prevDesde)) ? prevDesde : '';
+  hastaSel.value = yms.includes(parseInt(prevHasta)) ? prevHasta : '';
+}
+
+function renderAccionesTab() {
+  const body = document.getElementById('accionesTableBody');
+  if (!body) return;
+  populateAccionPeriodSelects();
+
+  const search = (document.getElementById('searchAccion').value || '').toLowerCase().trim();
+  const tipoFilter = document.getElementById('filterTipoAccion').value;
+  const desde = document.getElementById('filterAccionDesde').value;
+  const hasta = document.getElementById('filterAccionHasta').value;
+
+  let rows = state.acciones.filter(a => {
+    if (tipoFilter && a.accion !== tipoFilter) return false;
+    const ym = yyyymmFromISO(a.creado_en);
+    if (desde && ym < parseInt(desde)) return false;
+    if (hasta && ym > parseInt(hasta)) return false;
+    if (search && !(String(a.apellido_nombre||'').toLowerCase() + ' ' + String(a.cuil||'')).includes(search)) return false;
+    return true;
+  });
+
+  body.innerHTML = rows.map(a => `
+    <tr>
+      <td>${fmtFecha(a.creado_en)}</td>
+      <td class="name-cell">${a.apellido_nombre||''}</td>
+      <td>${a.cuil||''}</td>
+      <td class="name-cell">${a.contrato||'—'}</td>
+      <td><span class="action-pill" style="background:${ACTION_COLOR[a.accion]}22;color:${ACTION_COLOR[a.accion]};border-color:${ACTION_COLOR[a.accion]}55;">${a.accion}</span></td>
+      <td>${a.anio_mes_hasta ? fmtMonth(a.anio_mes_hasta) : '—'}</td>
+      <td><button class="ps-btn ps-btn-ghost" style="padding:4px 10px;font-size:11px;" onclick="deleteAccion(${a.id})">✕</button></td>
+    </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin acciones registradas todavía</td></tr>`;
+
+  document.getElementById('accionesTableCount').textContent = rows.length + ' de ' + state.acciones.length + ' acciones';
+}
+
+async function deleteAccion(id) {
+  if (!confirm('¿Eliminar este registro de acción? No se puede deshacer.')) return;
+  showLoader(true);
+  try {
+    await sb('icr_acciones?id=eq.' + id, { method: 'DELETE', headers: { 'Prefer': 'return=minimal' } });
+    state.acciones = await sb('icr_acciones?select=*&order=creado_en.desc') || [];
+    renderAccionesTab();
+    renderDashboard();
+  } catch (e) {
+    alert('No se pudo eliminar: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+/* ---- driver table ---- */
+function renderDriverTable() {
+  const monthRows = rowsForSelectedMonth(filteredRegistros());
+  const search = (document.getElementById('searchDriver').value || '').toLowerCase().trim();
+  const riskFilter = document.getElementById('filterRisk').value;
+  const contratoFilter = state.focusContrato || document.getElementById('filterContrato').value;
+  const dispFilter = document.getElementById('filterDispersion').value;
+
+  let rows = monthRows.filter(r => {
+    if (riskFilter && r.icr_categoria !== riskFilter) return false;
+    if (contratoFilter) {
+      const match = contratoFilter === ACUMULADO_KEY ? ACUMULADO_SOURCES.includes(r.contrato) : r.contrato === contratoFilter;
+      if (!match) return false;
+    }
+    if (dispFilter === 'si' && !r.es_dispersion) return false;
+    if (dispFilter === 'no' && r.es_dispersion) return false;
+    if (search && !(String(r.apellido_nombre||'').toLowerCase() + ' ' + String(r.cuil||'')).includes(search)) return false;
+    return true;
+  });
+
+  rows = rows.slice().sort((a,b) => {
+    let va = a[state.sortKey], vb = b[state.sortKey];
+    if (state.sortKey === 'icr_categoria') { va = RISK_ORDER.indexOf(va); vb = RISK_ORDER.indexOf(vb); }
+    if (typeof va === 'string') return va.localeCompare(vb) * state.sortDir;
+    return ((va||0) - (vb||0)) * state.sortDir;
+  });
+
+  document.getElementById('driverTableBody').innerHTML = rows.map(r => `
+    <tr class="${r.es_dispersion ? 'row-dispersion' : ''}">
+      <td class="name-cell">${r.apellido_nombre||''}</td>
+      <td>${r.cuil||''}</td>
+      <td class="name-cell">${r.contrato||'<span style="color:var(--text-faint)">Sin contrato</span>'}</td>
+      <td><span class="badge ${RISK_BADGE[r.icr_categoria]||'badge-gray'}">${r.icr_categoria||'—'}</span>${r.es_dispersion ? ' <span class="badge badge-gray">Dispersión</span>' : ''}</td>
+      <td>${num(r.suma_distancia_km).toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+      <td>${num(r.q_exceso_vel)}</td>
+      <td>${num(r.q_incidentes)}</td>
+      <td>${num(r.q_dias_conduccion)}</td>
+      <td>
+        <label class="disp-toggle">
+          <input type="checkbox" ${r.es_dispersion ? 'checked' : ''} onchange="toggleDispersion(${r.id})">
+          <span>${r.es_dispersion ? 'Marcado' : 'Marcar'}</span>
+        </label>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin resultados</td></tr>`;
+
+  document.getElementById('tableSub').textContent = fmtMonth(state.selectedMonth) + (contratoFilter ? ' · ' + contratoFilter : '');
+  document.getElementById('driverTableCount').textContent = rows.length + ' de ' + monthRows.length + ' choferes';
+}
+
+async function toggleDispersion(id) {
+  const rec = state.registros.find(r => r.id === id);
+  if (!rec) return;
+  const newVal = !rec.es_dispersion;
+  showLoader(true);
+  try {
+    await sb('icr_registros?id=eq.' + id, {
+      method: 'PATCH',
+      body: JSON.stringify({ es_dispersion: newVal, dispersion_marcado_en: newVal ? new Date().toISOString() : null })
+    });
+    rec.es_dispersion = newVal;
+    renderDashboard();
+  } catch (e) {
+    alert('No se pudo actualizar: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+/* ============================================================
+   CONTRATOS (tab de administración)
+   ============================================================ */
+function renderContractChecklist() {
+  const el = document.getElementById('contractChecklist');
+  el.innerHTML = orderedContratos(state.contratos.map(c=>c.contrato)).map(name => {
+    const c = state.contratos.find(x => x.contrato === name);
+    const isAcum = name === ACUMULADO_KEY;
+    return `
+    <div class="check-item">
+      <input type="checkbox" id="chk_${cssId(name)}" ${c.seleccionado ? 'checked' : ''}>
+      <label for="chk_${cssId(name)}">${isAcum ? '∑ ACUMULADO (suma PAE+PS+BAKER+NOVOMET)' : name}</label>
+    </div>`;
+  }).join('');
+}
+function cssId(s) { return s.replace(/[^a-zA-Z0-9]/g,'_'); }
+
+async function saveContratos() {
+  const updates = state.contratos.map(c => ({ contrato: c.contrato, seleccionado: document.getElementById('chk_' + cssId(c.contrato)).checked }));
+  showLoader(true);
+  try {
+    for (const u of updates) {
+      await sb('icr_contratos_filtro?contrato=eq.' + encodeURIComponent(u.contrato), { method:'PATCH', body: JSON.stringify({ seleccionado: u.seleccionado }) });
+    }
+    document.getElementById('contratosSaveMsg').textContent = '✓ Guardado';
+    setTimeout(()=> document.getElementById('contratosSaveMsg').textContent = '', 2500);
+    await loadAll(false);
+  } catch (e) { alert('Error guardando: ' + e.message); }
+  finally { showLoader(false); }
+}
+
+/* ============================================================
+   IMPORTAR MES
+   ============================================================ */
+const FIELD_NAMES = [
+  'apellido_nombre','cuil','anio_mes','icr_categoria','q_incidentes','q_ac_fr_bruscas',
+  'q_dias_excedio_manejo','min_manejo_2hs','suma_distancia_km','exceso_vel_min',
+  'q_exceso_vel','vel_extrema_min','q_vel_extrema','q_infraccion_vel','q_dias_conduccion','empresa_actual'
+];
+
+function setupDropzone() {
+  const dz = document.getElementById('dropzone');
+  ['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const statusEl = document.getElementById('importStatus');
+  statusEl.innerHTML = `<div class="ps-alert ps-alert-info">Leyendo ${file.name}…</div>`;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+      parseRows(rows, file.name);
+    } catch (err) { statusEl.innerHTML = `<div class="ps-alert ps-alert-danger">No se pudo leer el archivo: ${err.message}</div>`; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function normHeader(s) { return String(s||'').toLowerCase().trim().replace(/\s+/g,' '); }
+
+function parseRows(rawRows, filename) {
+  const statusEl = document.getElementById('importStatus');
+  if (!rawRows.length) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">Archivo vacío.</div>'; return; }
+
+  const firstRow = rawRows[0].map(normHeader);
+  const looksLikeHeader = normHeader(firstRow[0]).includes('apellido') || normHeader(firstRow[1]).includes('cuil');
+  const dataRows = looksLikeHeader ? rawRows.slice(1) : rawRows;
+
+  const parsed = []; const unmatched = []; let mixedMonthWarning = false; let firstMonth = null;
+
+  for (const row of dataRows) {
+    if (!row || row.every(v => v === null || v === '')) continue;
+    const rec = {};
+    FIELD_NAMES.forEach((f,i) => rec[f] = row[i] !== undefined ? row[i] : null);
+    if (!rec.apellido_nombre && !rec.cuil) continue;
+
+    rec.cuil = rec.cuil ? parseInt(rec.cuil) : null;
+    rec.anio_mes = rec.anio_mes ? parseInt(rec.anio_mes) : null;
+    ['q_incidentes','q_ac_fr_bruscas','q_dias_excedio_manejo','min_manejo_2hs','suma_distancia_km',
+     'exceso_vel_min','q_exceso_vel','vel_extrema_min','q_vel_extrema','q_infraccion_vel','q_dias_conduccion']
+     .forEach(f => rec[f] = rec[f] !== null && rec[f] !== '' ? parseFloat(rec[f]) : 0);
+
+    if (!rec.cuil || !rec.anio_mes) continue;
+    if (firstMonth === null) firstMonth = rec.anio_mes; else if (rec.anio_mes !== firstMonth) mixedMonthWarning = true;
+
+    const person = state.personalByCuit[rec.cuil];
+    rec.contrato = person ? person.contrato : null;
+    if (!person) unmatched.push(rec);
+    parsed.push(rec);
+  }
+
+  if (!parsed.length) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">No se encontraron filas válidas (revisá columnas CUIL y Año-Mes).</div>'; return; }
+
+  state.pendingImport = { rows: parsed, filename, month: firstMonth };
+  statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">Archivo leído: ${parsed.length} filas${mixedMonthWarning ? ' — <b>atención: hay más de un Año-Mes en el archivo</b>' : ''}.</div>`;
+  renderImportPreview(mixedMonthWarning, unmatched);
+}
+
+function renderImportPreview(mixedMonthWarning, unmatched) {
+  const { rows, filename, month } = state.pendingImport;
+  const contratoOptions = state.contratos.map(c => `<option value="${c.contrato}">${c.contrato}</option>`).join('');
+  const el = document.getElementById('importPreview');
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-title">Vista previa — ${filename}</div>
+      <div class="kpi-strip" style="margin-bottom:16px;">
+        <div class="kpi-mini"><div class="k">Mes detectado</div><div class="v">${month ? fmtMonth(month) : '—'}</div></div>
+        <div class="kpi-mini"><div class="k">Filas a importar</div><div class="v">${rows.length}</div></div>
+        <div class="kpi-mini"><div class="k">Sin contrato</div><div class="v ${unmatched.length ? 'alto' : ''}">${unmatched.length}</div></div>
+      </div>
+      ${mixedMonthWarning ? '<div class="ps-alert ps-alert-warn">El archivo tiene más de un Año-Mes distinto. Revisá que sea correcto.</div>' : ''}
+      ${unmatched.length ? `<div class="ps-alert ps-alert-warn">${unmatched.length} choferes no se encontraron por CUIL en la nómina. Asignales contrato abajo o dejalos sin contrato (no entrarán en los filtros).</div>` : ''}
+      ${unmatched.length ? `
+      <div class="table-wrap" style="margin-bottom:16px;">
+        <table class="data"><thead><tr><th>Chofer</th><th>CUIL</th><th>Asignar contrato</th></tr></thead>
+        <tbody>${unmatched.map(r => `<tr>
+          <td class="name-cell">${r.apellido_nombre||''}</td><td>${r.cuil||''}</td>
+          <td><select class="ps-select" style="min-width:180px;" onchange="assignUnmatchedContrato(${r.cuil}, this.value)">
+            <option value="">Sin contrato</option>${contratoOptions}
+          </select></td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+      <button class="ps-btn ps-btn-primary" onclick="confirmImport()">✓ Confirmar e importar</button>
+      <button class="ps-btn ps-btn-ghost" onclick="cancelImport()">Cancelar</button>
+      <div id="importConfirmStatus" style="margin-top:14px;"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Todas las filas (primeras 50)</div>
+      <div class="table-wrap">
+        <table class="data"><thead><tr><th>Chofer</th><th>CUIL</th><th>Contrato</th><th>Categoría</th><th>Km</th><th>Excesos</th></tr></thead>
+        <tbody>${rows.slice(0,50).map(r => `<tr>
+          <td class="name-cell">${r.apellido_nombre||''}</td><td>${r.cuil||''}</td>
+          <td class="name-cell">${r.contrato || '<span style="color:var(--text-faint)">—</span>'}</td>
+          <td><span class="badge ${RISK_BADGE[r.icr_categoria]||'badge-gray'}">${r.icr_categoria||'—'}</span></td>
+          <td>${r.suma_distancia_km}</td><td>${r.q_exceso_vel}</td></tr>`).join('')}</tbody></table>
+      </div>
+      ${rows.length > 50 ? `<div style="margin-top:10px;font-size:12px;color:var(--text-faint);">… y ${rows.length-50} filas más</div>` : ''}
+    </div>`;
+}
+
+function assignUnmatchedContrato(cuil, contrato) {
+  const rec = state.pendingImport.rows.find(r => r.cuil === cuil);
+  if (rec) rec.contrato = contrato || null;
+}
+
+function cancelImport() {
+  state.pendingImport = null;
+  document.getElementById('importPreview').innerHTML = '';
+  document.getElementById('importStatus').innerHTML = '';
+  document.getElementById('fileInput').value = '';
+}
+
+async function confirmImport() {
+  if (!state.pendingImport) return;
+  const { rows, filename, month } = state.pendingImport;
+  const statusEl = document.getElementById('importConfirmStatus');
+  statusEl.innerHTML = '<div class="ps-alert ps-alert-info">Importando…</div>';
+  showLoader(true);
+
+  const knownContratos = new Set(state.contratos.map(c => c.contrato));
+  const nuevos = Array.from(new Set(rows.map(r => r.contrato).filter(c => c && !knownContratos.has(c))));
+
+  try {
+    if (nuevos.length) {
+      await sb('icr_contratos_filtro', { method:'POST', headers:{'Prefer':'resolution=ignore-duplicates,return=minimal'},
+        body: JSON.stringify(nuevos.map(c => ({ contrato:c, seleccionado:false }))) });
+    }
+    const chunkSize = 200; let imported = 0;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize).map(r => ({
+        cuil:r.cuil, apellido_nombre:r.apellido_nombre, anio_mes:r.anio_mes, icr_categoria:r.icr_categoria,
+        q_incidentes:r.q_incidentes, q_ac_fr_bruscas:r.q_ac_fr_bruscas, q_dias_excedio_manejo:r.q_dias_excedio_manejo,
+        min_manejo_2hs:r.min_manejo_2hs, suma_distancia_km:r.suma_distancia_km, exceso_vel_min:r.exceso_vel_min,
+        q_exceso_vel:r.q_exceso_vel, vel_extrema_min:r.vel_extrema_min, q_vel_extrema:r.q_vel_extrema,
+        q_infraccion_vel:r.q_infraccion_vel, q_dias_conduccion:r.q_dias_conduccion, empresa_actual:r.empresa_actual, contrato:r.contrato
+      }));
+      await sb('icr_registros', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(chunk) });
+      imported += chunk.length;
+    }
+    await sb('icr_importaciones', { method:'POST', headers:{'Prefer':'return=minimal'},
+      body: JSON.stringify([{ anio_mes:month, archivo:filename, filas_importadas:imported, filas_sin_match: rows.filter(r=>!r.contrato).length }]) });
+
+    statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">✓ Importación completa: ${imported} filas cargadas.</div>`;
+    cancelImport();
+    await loadAll(false);
+    if (month) { state.selectedMonth = month; document.getElementById('selMonth').value = month; renderDashboard(); }
+    switchView('dashboard');
+  } catch (e) { statusEl.innerHTML = `<div class="ps-alert ps-alert-danger">Error al importar: ${e.message}</div>`; }
+  finally { showLoader(false); }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+(function init() {
+  if (loadConfig()) {
+    document.getElementById('configGate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
