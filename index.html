@@ -8,15 +8,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg:            #0b1220;
-  --bg-soft:       #0e1626;
-  --panel:         #131d33;
-  --panel-2:       #101a2e;
-  --panel-border:  rgba(255,255,255,0.07);
-  --panel-border-hi: rgba(255,255,255,0.14);
+  --bg:            #141b2b;
+  --bg-soft:       #171f30;
+  --panel:         #3c4c6c;
+  --panel-2:       #34435f;
+  --panel-border:  rgba(255,255,255,0.15);
+  --panel-border-hi: rgba(255,255,255,0.25);
   --text:          #e7edf7;
-  --text-dim:      #97a4bd;
-  --text-faint:    #5b6b85;
+  --text-dim:      #a3b0c7;
+  --text-faint:    #7686a2;
   --amber:         #e8a020;
   --amber2:        #f0b429;
   --risk-alto:     #ef4444;
@@ -33,7 +33,7 @@
 
 body {
   font-family: var(--font-body);
-  background: radial-gradient(1200px 800px at 15% -10%, #14213a 0%, var(--bg) 55%);
+  background: radial-gradient(1200px 800px at 15% -10%, #2c3c5c 0%, var(--bg) 55%);
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
@@ -248,7 +248,27 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
 .repeat-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px; }
 .repeat-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: var(--panel-2); }
 .repeat-row-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.repeat-row-bottom { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--panel-border); flex-wrap: wrap; }
+.repeat-row-bottom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.repeat-row-form { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--panel-border); flex-wrap: wrap; }
+.action-pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.action-summary-empty { font-size: 12px; color: var(--text-faint); }
+.action-details { width: 100%; }
+.action-details summary {
+  font-size: 12px; color: var(--text-dim); cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.action-details summary::-webkit-details-marker { display: none; }
+.action-details summary::before { content: '▸'; font-size: 10px; color: var(--text-faint); transition: transform .15s; }
+.action-details[open] summary::before { transform: rotate(90deg); }
+.action-details summary:hover { color: var(--text); }
+.action-history-link {
+  background: none; border: none; color: var(--text-faint); font-size: 11px; text-decoration: underline;
+  cursor: pointer; font-family: var(--font-body); padding: 0; margin-left: 4px;
+}
+.action-history-link:hover { color: var(--amber2); }
+.action-checks { display: flex; gap: 10px; flex-wrap: wrap; flex: 1; }
+.action-check { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+.action-check input { width: 14px; height: 14px; accent-color: var(--amber); cursor: pointer; }
 .repeat-row .who { flex: 1; min-width: 0; }
 .repeat-row .who .nm { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .repeat-row .who .ct { font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -670,7 +690,7 @@ async function loadAll(manual) {
     state.personal.forEach(p => state.personalByCuit[p.cuit] = p);
     state.contratos = contratos || [];
     state.acciones = acciones || [];
-    state.selectedContratos = new Set(state.contratos.filter(c => c.seleccionado).map(c => c.contrato));
+    if (!manual) state.selectedContratos = new Set(); // arranca en blanco: elegís vos qué contrato ver cada vez
 
     renderContractChips();
     renderContractChecklist();
@@ -933,10 +953,10 @@ function renderRiskTrendChart(rows, months) {
     data: { labels, datasets },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{ color:'#97a4bd', boxWidth:10, font:{size:11} } } },
+      plugins:{ legend:{ position:'bottom', labels:{ color:'#a3b0c7', boxWidth:10, font:{size:11} } } },
       scales:{
-        y:{ stacked, beginAtZero:true, ticks:{color:'#5b6b85'}, grid:{color:'rgba(255,255,255,0.05)'}, title: !isCategoria ? {display:true,text:'% riesgo',color:'#5b6b85'} : undefined },
-        x:{ stacked, ticks:{color:'#5b6b85'}, grid:{color:'rgba(255,255,255,0.03)'} }
+        y:{ stacked, beginAtZero:true, ticks:{color:'#7686a2'}, grid:{color:'rgba(255,255,255,0.08)'}, title: !isCategoria ? {display:true,text:'% riesgo',color:'#7686a2'} : undefined },
+        x:{ stacked, ticks:{color:'#7686a2'}, grid:{color:'rgba(255,255,255,0.05)'} }
       }
     }
   });
@@ -961,7 +981,7 @@ function computeRepeatOffenders(rows, months) {
       if (cat === 'Alto' || cat === 'Moderado') run.push({ m, cat });
       else run = [];
     });
-    if (run.length >= 2) results.push({ cuil, nombre: d.nombre, contrato: d.contrato, run });
+    if (run.length >= 2) results.push({ cuil: Number(cuil), nombre: d.nombre, contrato: d.contrato, run });
   });
 
   results.sort((a,b) => b.run.length - a.run.length || String(a.nombre).localeCompare(String(b.nombre)));
@@ -969,7 +989,7 @@ function computeRepeatOffenders(rows, months) {
 }
 
 function latestAccionFor(cuil) {
-  return state.acciones.find(a => a.cuil === cuil) || null;
+  return state.acciones.find(a => String(a.cuil) === String(cuil)) || null;
 }
 
 function fmtFecha(iso) {
@@ -988,8 +1008,9 @@ function renderRepeatOffenders(rows, months) {
     return;
   }
   el.innerHTML = `<div class="repeat-list">${offenders.map(o => {
-    const latest = latestAccionFor(o.cuil);
     const anioMesHasta = o.run[o.run.length - 1].m;
+    const episodio = state.acciones.filter(a => String(a.cuil) === String(o.cuil) && a.anio_mes_hasta === anioMesHasta)
+      .sort((a,b) => new Date(a.creado_en) - new Date(b.creado_en));
     const uid = 'acc_' + o.cuil;
     return `
     <div class="repeat-row">
@@ -1004,34 +1025,51 @@ function renderRepeatOffenders(rows, months) {
         <div class="repeat-count">${o.run.length} meses</div>
       </div>
       <div class="repeat-row-bottom">
-        ${latest
-          ? `<span class="action-pill" style="background:${ACTION_COLOR[latest.accion]}22;color:${ACTION_COLOR[latest.accion]};border-color:${ACTION_COLOR[latest.accion]}55;">${latest.accion} · ${fmtFecha(latest.creado_en)}</span>`
-          : `<span class="action-pill action-pill-empty">Sin acción registrada</span>`}
-        <select class="ps-select action-select" id="sel_${uid}">
-          <option value="">Acción…</option>
-          ${ACTION_TYPES.map(a => `<option value="${a}">${a}</option>`).join('')}
-        </select>
+        ${(() => {
+          if (!episodio.length) return `<span class="action-summary-empty">Sin acciones registradas</span>`;
+          const grouped = {};
+          episodio.forEach(a => {
+            if (!grouped[a.accion]) grouped[a.accion] = { count: 0, last: a.creado_en };
+            grouped[a.accion].count++;
+            if (new Date(a.creado_en) > new Date(grouped[a.accion].last)) grouped[a.accion].last = a.creado_en;
+          });
+          const ultima = episodio.reduce((mx, a) => new Date(a.creado_en) > new Date(mx.creado_en) ? a : mx, episodio[0]);
+          const pills = Object.entries(grouped).map(([tipo, info]) => `<span class="action-pill" style="background:${ACTION_COLOR[tipo]}22;color:${ACTION_COLOR[tipo]};border-color:${ACTION_COLOR[tipo]}55;">${tipo}${info.count>1?' ×'+info.count:''} · ${fmtFecha(info.last)}</span>`).join('');
+          return `
+          <details class="action-details">
+            <summary>${episodio.length} acci${episodio.length===1?'ón':'ones'} registrada${episodio.length===1?'':'s'} · última: ${ultima.accion} (${fmtFecha(ultima.creado_en)})</summary>
+            <div class="action-pills">${pills}<button class="action-history-link" onclick="verHistorialChofer(${o.cuil})">Ver historial completo</button></div>
+          </details>`;
+        })()}
+      </div>
+      <div class="repeat-row-form">
+        <div class="action-checks">
+          ${ACTION_TYPES.map(t => `<label class="action-check"><input type="checkbox" class="chk_${uid}" value="${t}"><span>${t}</span></label>`).join('')}
+        </div>
         <input type="date" class="ps-input action-date" id="date_${uid}" value="${todayISO()}">
-        <button class="ps-btn ps-btn-ghost" style="padding:7px 12px;font-size:12px;" onclick="registrarAccion('${uid}', ${o.cuil}, '${String(o.nombre||'').replace(/'/g,"\\'")}', '${String(o.contrato||'').replace(/'/g,"\\'")}', ${anioMesHasta})">Guardar</button>
+        <button class="ps-btn ps-btn-ghost" style="padding:7px 12px;font-size:12px;" onclick="registrarAcciones('${uid}', ${o.cuil}, '${String(o.nombre||'').replace(/'/g,"\\'")}', '${String(o.contrato||'').replace(/'/g,"\\'")}', ${anioMesHasta})">Guardar</button>
       </div>
     </div>`;
   }).join('')}</div>`;
 }
 
-async function registrarAccion(uid, cuil, nombre, contrato, anioMesHasta) {
-  const selEl = document.getElementById('sel_' + uid);
+function verHistorialChofer(cuil) {
+  switchView('acciones');
+  const searchEl = document.getElementById('searchAccion');
+  searchEl.value = String(cuil);
+  renderAccionesTab();
+}
+
+async function registrarAcciones(uid, cuil, nombre, contrato, anioMesHasta) {
+  const checks = Array.from(document.querySelectorAll('.chk_' + uid + ':checked')).map(c => c.value);
   const dateEl = document.getElementById('date_' + uid);
-  const accion = selEl.value;
   const fecha = dateEl.value;
-  if (!accion) { alert('Elegí qué acción se tomó.'); return; }
+  if (!checks.length) { alert('Tildá al menos una acción.'); return; }
   if (!fecha) { alert('Elegí la fecha de la acción.'); return; }
   showLoader(true);
   try {
-    await sb('icr_acciones', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=minimal' },
-      body: JSON.stringify([{ cuil, apellido_nombre: nombre, contrato, accion, anio_mes_hasta: anioMesHasta, creado_en: fecha + 'T12:00:00' }])
-    });
+    const payload = checks.map(accion => ({ cuil, apellido_nombre: nombre, contrato, accion, anio_mes_hasta: anioMesHasta, creado_en: fecha + 'T12:00:00' }));
+    await sb('icr_acciones', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(payload) });
     state.acciones = await sb('icr_acciones?select=*&order=creado_en.desc') || [];
     renderDashboard();
     renderAccionesTab();
