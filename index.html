@@ -568,7 +568,10 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
 /* ============================================================
    CONFIG
    ============================================================ */
-let CONFIG = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' };
+let CONFIG = {
+  SUPABASE_URL: 'https://pwyhhyskmbeawpzyanmf.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3eWhoeXNrbWJlYXdwenlhbm1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNDQ3MTAsImV4cCI6MjEwMDkyMDcxMH0.dkLOCrbXTUxcypaL1YXMT75uK8ZmouGIjNQWoAPEJEc'
+};
 
 function loadConfig() {
   try {
@@ -1520,11 +1523,9 @@ async function confirmImport() {
    INIT
    ============================================================ */
 (function init() {
-  if (loadConfig()) {
-    document.getElementById('configGate').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    boot();
-  }
+  document.getElementById('configGate').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  boot();
 })();
 </script>
 </body>
