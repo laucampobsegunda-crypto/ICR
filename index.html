@@ -328,6 +328,7 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
       <button class="nav-item active" data-view="dashboard"><span class="ic">◈</span> Panel general</button>
       <button class="nav-item" data-view="import"><span class="ic">⇪</span> Importar mes</button>
       <button class="nav-item" data-view="acciones"><span class="ic">📋</span> Acciones</button>
+      <button class="nav-item" data-view="nomina"><span class="ic">🧑‍✈️</span> Nómina</button>
       <button class="nav-item" data-view="contratos"><span class="ic">▤</span> Contratos</button>
     </nav>
 
@@ -517,6 +518,35 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
         </div>
       </section>
 
+      <!-- ================= NOMINA ================= -->
+      <section class="ps-view" id="view-nomina">
+        <div class="panel">
+          <div class="panel-title">Nómina de choferes</div>
+          <div class="panel-sub">Buscá al chofer y cambiale el contrato. Por defecto solo afecta los meses que se importen de ahora en más — tildá "corregir histórico" si también hay que arreglar los meses ya cargados.</div>
+          <div class="table-toolbar" style="margin-bottom:14px;">
+            <div class="f" style="flex:2;min-width:220px;">
+              <input class="ps-input" id="searchNomina" placeholder="Buscar por nombre o CUIT…" oninput="renderNominaTab()">
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="nominaTable">
+              <thead>
+                <tr>
+                  <th>Chofer</th>
+                  <th>CUIT</th>
+                  <th>Base</th>
+                  <th>Contrato actual</th>
+                  <th>Nuevo contrato</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="nominaTableBody"></tbody>
+            </table>
+          </div>
+          <div id="nominaTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
+        </div>
+      </section>
+
       <!-- ================= CONTRATOS ================= -->
       <section class="ps-view" id="view-contratos">
         <div class="panel">
@@ -667,8 +697,8 @@ async function boot() {
 function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   document.querySelectorAll('.ps-view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
-  const titles = { dashboard: 'Panel general', import: 'Importar mes', acciones: 'Acciones', contratos: 'Contratos' };
-  const subs = { dashboard: 'Desempeño de conductores por contrato y período', import: 'Cargar el archivo mensual del sistema de GPS', acciones: 'Historial de acciones sobre choferes reincidentes', contratos: 'Definir qué contratos entran al panel' };
+  const titles = { dashboard: 'Panel general', import: 'Importar mes', acciones: 'Acciones', nomina: 'Nómina', contratos: 'Contratos' };
+  const subs = { dashboard: 'Desempeño de conductores por contrato y período', import: 'Cargar el archivo mensual del sistema de GPS', acciones: 'Historial de acciones sobre choferes reincidentes', nomina: 'Asignar o corregir el contrato de cada chofer', contratos: 'Definir qué contratos entran al panel' };
   document.getElementById('topbarTitle').textContent = titles[view];
   document.getElementById('topbarSub').textContent = subs[view];
   document.getElementById('monthBlock').classList.toggle('hidden', view !== 'dashboard');
@@ -680,7 +710,7 @@ async function loadAll(manual) {
   try {
     const [registros, personal, contratos, acciones] = await Promise.all([
       sbAll('icr_registros?select=*&order=anio_mes.asc'),
-      sbAll('icr_personal?select=cuit,nombre,contrato'),
+      sbAll('icr_personal?select=cuit,nombre,contrato,base'),
       sb('icr_contratos_filtro?select=*&order=contrato.asc'),
       sb('icr_acciones?select=*&order=creado_en.desc')
     ]);
@@ -699,6 +729,7 @@ async function loadAll(manual) {
     populateContratoFilterSelect();
     renderDashboard();
     renderAccionesTab();
+    renderNominaTab();
   } catch (e) {
     console.error(e);
     alert('Error cargando datos de Supabase: ' + e.message);
@@ -1142,6 +1173,81 @@ async function deleteAccion(id) {
     renderDashboard();
   } catch (e) {
     alert('No se pudo eliminar: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
+/* ---- pestaña Nómina (asignar/corregir contrato de un chofer) ---- */
+function renderNominaTab() {
+  const body = document.getElementById('nominaTableBody');
+  if (!body) return;
+  const search = (document.getElementById('searchNomina').value || '').toLowerCase().trim();
+
+  let personas = state.personal.filter(p => {
+    if (!search) return true;
+    return (String(p.nombre||'').toLowerCase() + ' ' + String(p.cuit||'')).includes(search);
+  });
+  personas = personas.slice().sort((a,b) => String(a.nombre||'').localeCompare(String(b.nombre||'')));
+
+  const contratoOptions = state.contratos.map(c => c.contrato).filter(c => c !== ACUMULADO_KEY);
+
+  // Sin búsqueda no se listan los 558 de una: pide que escriba algo primero.
+  if (!search) {
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Escribí un nombre o CUIT para buscar al chofer</td></tr>`;
+    document.getElementById('nominaTableCount').textContent = state.personal.length + ' choferes en la nómina';
+    return;
+  }
+
+  body.innerHTML = personas.map(p => `
+    <tr>
+      <td class="name-cell">${p.nombre||''}</td>
+      <td>${p.cuit||''}</td>
+      <td>${p.base||'—'}</td>
+      <td class="name-cell">${p.contrato||'<span style="color:var(--text-faint)">Sin contrato</span>'}</td>
+      <td>
+        <select class="ps-select" id="nom_sel_${p.cuit}" style="min-width:170px;">
+          ${contratoOptions.map(c => `<option value="${c}" ${c===p.contrato?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </td>
+      <td style="white-space:nowrap;">
+        <label class="action-check" style="margin-right:8px;"><input type="checkbox" id="nom_hist_${p.cuit}"><span>Corregir histórico</span></label>
+        <button class="ps-btn ps-btn-ghost" style="padding:6px 12px;font-size:12px;" onclick="guardarContratoPersona(${p.cuit})">Guardar</button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin resultados</td></tr>`;
+
+  document.getElementById('nominaTableCount').textContent = personas.length + ' de ' + state.personal.length + ' choferes';
+}
+
+async function guardarContratoPersona(cuit) {
+  const sel = document.getElementById('nom_sel_' + cuit);
+  const hist = document.getElementById('nom_hist_' + cuit);
+  const nuevoContrato = sel.value;
+  const aplicarHistorico = hist.checked;
+  if (!nuevoContrato) return;
+
+  const confirmMsg = aplicarHistorico
+    ? `Vas a cambiar el contrato a "${nuevoContrato}" para este chofer, incluyendo TODOS los meses ya cargados. ¿Confirmás?`
+    : `Vas a cambiar el contrato a "${nuevoContrato}" para este chofer. Solo afecta los meses que se importen de ahora en más. ¿Confirmás?`;
+  if (!confirm(confirmMsg)) return;
+
+  showLoader(true);
+  try {
+    await sb('icr_personal?cuit=eq.' + cuit, { method: 'PATCH', body: JSON.stringify({ contrato: nuevoContrato }) });
+    const p = state.personal.find(x => x.cuit === cuit);
+    if (p) p.contrato = nuevoContrato;
+    if (state.personalByCuit[cuit]) state.personalByCuit[cuit].contrato = nuevoContrato;
+
+    if (aplicarHistorico) {
+      await sb('icr_registros?cuil=eq.' + cuit, { method: 'PATCH', body: JSON.stringify({ contrato: nuevoContrato }) });
+      state.registros.forEach(r => { if (r.cuil === cuit) r.contrato = nuevoContrato; });
+    }
+
+    renderNominaTab();
+    renderDashboard();
+    alert('Contrato actualizado' + (aplicarHistorico ? ' (incluyendo histórico).' : '.'));
+  } catch (e) {
+    alert('No se pudo actualizar: ' + e.message);
   } finally {
     showLoader(false);
   }
