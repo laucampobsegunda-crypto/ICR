@@ -247,7 +247,10 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
 
 .repeat-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px; }
 .repeat-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); background: var(--panel-2); }
-.repeat-row-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.repeat-row-top { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.motivos { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 260px; }
+.motivo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.motivo-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .5px; min-width: 150px; }
 .repeat-row-bottom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .repeat-row-form { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed var(--panel-border); flex-wrap: wrap; }
 .action-pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
@@ -283,6 +286,26 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
 .action-date { max-width: 150px; font-size: 12px; padding: 6px 10px; }
 
 .empty-state { text-align: center; padding: 50px 20px; color: var(--text-faint); }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.modal-box {
+  background: var(--panel); border: 1px solid var(--panel-border-hi); border-radius: var(--radius-lg);
+  max-width: 1200px; width: 100%; max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--panel-border); }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-sub { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
+.modal-body { padding: 20px 24px; overflow-y: auto; }
+.modal-section-title { font-size: 13px; font-weight: 700; color: var(--amber2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.modal-note { font-size: 12.5px; color: var(--text-dim); background: var(--panel-2); border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 14px 16px; }
+.modal-note ol { margin: 8px 0 0 18px; }
+.modal-note li { margin-bottom: 4px; }
+.decision-table th, .decision-table td { white-space: normal; font-size: 12px; vertical-align: top; min-width: 130px; }
+.decision-table td:first-child, .decision-table td:nth-child(2) { min-width: 200px; }
 
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -400,7 +423,8 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
             </div>
             <div class="panel">
               <div class="panel-title">Choferes reincidentes</div>
-              <div class="panel-sub">Alto o Moderado en 2 o más meses consecutivos (histórico, contratos seleccionados)</div>
+              <div class="panel-sub">Alto/Moderado 2+ meses seguidos, o Alto 3+ meses alternados en el año (contratos seleccionados)</div>
+              <button class="ps-btn ps-btn-ghost" style="margin-top:10px;margin-bottom:4px;" onclick="openDecisionModal()">📋 Ver tabla de decisión (inhabilitaciones)</button>
               <div id="repeatOffendersWrap"></div>
             </div>
           </div>
@@ -560,6 +584,61 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
         </div>
       </section>
 
+    </div>
+  </div>
+</div>
+
+<div id="decisionModalOverlay" class="modal-overlay hidden" onclick="if(event.target===this) closeDecisionModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Tabla de decisión — Inhabilitaciones (Movilidad)</div>
+        <div class="modal-sub">Política oficial de PETROSAR / Somos PAE para acciones sobre choferes, vehículos y empresas</div>
+      </div>
+      <button class="ps-btn ps-btn-ghost" onclick="closeDecisionModal()">✕ Cerrar</button>
+    </div>
+    <div class="modal-body">
+
+      <h4 class="modal-section-title">Conductor</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data decision-table">
+          <thead><tr><th>Motivo</th><th>Acción</th><th>Dónde</th><th>Quién solicita</th><th>Cómo se solicita</th><th>Quién aprueba</th><th>Quién informa a contratista</th><th>Cómo habilita</th><th>Quién solicita rehabilitación</th></tr></thead>
+          <tbody id="decisionTableConductor"></tbody>
+        </table>
+      </div>
+
+      <h4 class="modal-section-title">Vehículo liviano, pesado y transporte de personal</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data decision-table">
+          <thead><tr><th>Motivo</th><th>Acción</th><th>Dónde</th><th>Quién solicita</th><th>Cómo se solicita</th><th>Quién aprueba</th><th>Quién informa</th><th>Cómo habilita</th><th>Quién solicita rehabilitación</th></tr></thead>
+          <tbody id="decisionTableVehiculo"></tbody>
+        </table>
+      </div>
+
+      <h4 class="modal-section-title">Maquinaria en general</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data decision-table">
+          <thead><tr><th>Motivo</th><th>Acción</th><th>Dónde</th><th>Quién solicita</th><th>Cómo se solicita</th><th>Quién aprueba</th><th>Quién informa</th><th>Cómo habilita</th><th>Quién solicita rehabilitación</th></tr></thead>
+          <tbody id="decisionTableMaquinaria"></tbody>
+        </table>
+      </div>
+
+      <h4 class="modal-section-title">Empresas</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data decision-table">
+          <thead><tr><th>Motivo</th><th>Acción</th><th>Dónde</th><th>Quién solicita</th><th>Cómo se solicita</th><th>Quién aprueba</th><th>Quién informa</th><th>Cómo habilita</th><th>Quién solicita rehabilitación</th></tr></thead>
+          <tbody id="decisionTableEmpresas"></tbody>
+        </table>
+      </div>
+
+      <div class="modal-note">
+        <b>Nota 1 — Inhabilitar (función conductor):</b> Habilitación de recursos sin manejo luego de ser inhabilitados:
+        <ol>
+          <li>Acordar con el referente del servicio el ingreso sin manejo. Quién: Referente Contratista/Referente PAE. Cómo: vía mail.</li>
+          <li>Contratista ingresa a GRO y destilda la opción de manejo del recurso en cuestión. Quién: Referente contratista. Cómo: GRO.</li>
+          <li>Envía captura de pantalla a Referente de PAE y SSPP con copia a Referente SSA PAE y SV, solicitando habilitación nuevamente. Quién: Referente Contratista. Cómo: vía mail.</li>
+        </ol>
+      </div>
     </div>
   </div>
 </div>
@@ -1005,22 +1084,36 @@ function computeRepeatOffenders(rows, months) {
     byDriver[r.cuil].contrato = r.contrato;
   });
 
+  const rollingMonths = months.slice(-12); // año rolling: últimos 12 meses cargados
+
   const results = [];
   Object.entries(byDriver).forEach(([cuil, d]) => {
-    // Racha ACTUAL: se corta apenas hay un mes evaluado que no sea Alto/Moderado (o un mes sin datos).
-    // Si mejoró, la racha queda en 0 y deja de aparecer, aunque haya tenido una mala racha en el pasado.
+    // Regla A: racha ACTUAL de 2+ meses consecutivos en Alto o Moderado (se corta si mejora)
     let run = [];
     months.forEach(m => {
       const cat = d.byMonth[m];
       if (cat === 'Alto' || cat === 'Moderado') run.push({ m, cat });
       else run = [];
     });
-    if (run.length >= 2) results.push({ cuil: Number(cuil), nombre: d.nombre, contrato: d.contrato, run });
+    const consecutivo = run.length >= 2 ? run : null;
+
+    // Regla B: 3 o más meses en Alto, no necesariamente consecutivos, dentro del año rolling
+    const altoMeses = rollingMonths.filter(m => d.byMonth[m] === 'Alto').map(m => ({ m, cat: 'Alto' }));
+    const alternado = altoMeses.length >= 3 ? altoMeses : null;
+
+    if (consecutivo || alternado) {
+      results.push({ cuil: Number(cuil), nombre: d.nombre, contrato: d.contrato, consecutivo, alternado });
+    }
   });
 
-  results.sort((a,b) => b.run.length - a.run.length || String(a.nombre).localeCompare(String(b.nombre)));
+  results.sort((a,b) => {
+    const la = Math.max(a.consecutivo ? a.consecutivo.length : 0, a.alternado ? a.alternado.length : 0);
+    const lb = Math.max(b.consecutivo ? b.consecutivo.length : 0, b.alternado ? b.alternado.length : 0);
+    return lb - la || String(a.nombre).localeCompare(String(b.nombre));
+  });
   return results;
 }
+
 
 function latestAccionFor(cuil) {
   return state.acciones.find(a => String(a.cuil) === String(cuil)) || null;
@@ -1032,17 +1125,66 @@ function fmtFecha(iso) {
   return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
+/* ============================================================
+   TABLA DE DECISIÓN (política de inhabilitaciones - Movilidad)
+   ============================================================ */
+const DECISION_CONDUCTOR = [
+  { motivo:'Observación de seguridad (desvíos graves: uso teléfono, sobrepaso en lugar no autorizado, giros indebidos, velocidad inadecuada por factores climáticos)', accion:'Inhabilitar (función conductor)', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo', comoHabilita:'Certificado de escuela de conducción defensiva por incidente/mal desempeño en conducción y solicitud de rehabilitación del recurso en GRO (función conductor)', quienRehabilita:'Supervisor de SSA' },
+  { motivo:'Incidente vial (solo eventos de retroceso: toque de cartelería, vallados, etc.)', accion:'Solución 30 días (según cómo habilita)', donde:'N/A', quienSolicita:'Supervisor de SSA', comoSolicita:'Notificación por mail al referente operativo del vehículo (PAE | Contratista) con desvío', quienAprueba:'N/A', quienInforma:'Referente operativo', comoHabilita:'Presentar registro de concientización con el referente de servicio o supervisor directo (caso PAE)', quienRehabilita:'N/A' },
+  { motivo:'Incidente vial. Aplica también a incidentes viales con eventos de retroceso reincidentes dentro de los 6 meses', accion:'Inhabilitar (función conductor)', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo', comoHabilita:'Certificado de escuela de conducción defensiva por incidente/mal desempeño en conducción y solicitud de rehabilitación del recurso en GRO (función conductor)', quienRehabilita:'Supervisor de SSA' },
+  { motivo:'ICR moderado/alto mensual', accion:'Devolución del desempeño mensual al conductor', donde:'FORMS', quienSolicita:'N/A', comoSolicita:'N/A', quienAprueba:'N/A', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'N/A', quienRehabilita:'N/A' },
+  { motivo:'ICR alto mensual dos meses consecutivos / ICR alto por tres meses alternados en el año rolling', accion:'Inhabilitar función conductor', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Certificado de escuela de conducción defensiva por incidente/mal desempeño en conducción y solicitud de rehabilitación del recurso en GRO (función conductor). Apto médico si correspondiere', quienRehabilita:'Supervisor de SSA' },
+  { motivo:'ICR alto por dos meses consecutivos recurrente durante el año rolling', accion:'Inhabilitar (función conductor) por 60 días', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Pasado el plazo de 60 días de suspensión', quienRehabilita:'Supervisor de SSA' },
+];
+
+const DECISION_VEHICULO = [
+  { motivo:'Incidente vial (solo aquellos que sufran daño que impidan mecánicamente seguir circulando)', accion:'Inhabilitar', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'RTO posterior al incidente cargada en GRO', quienRehabilita:'Referente operativo / referente de SSA' },
+  { motivo:'Inspección con anomalía leve', accion:'Solución 30 días', donde:'Enviar mail', quienSolicita:'Supervisor de SSA', comoSolicita:'Notificación por mail al referente operativo del vehículo (PAE | Contratista) con desvío', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Evidencia de reparación', quienRehabilita:'Referente operativo / referente de SSA' },
+  { motivo:'Inspección con anomalía moderada / grave · RTO con observaciones', accion:'Inhabilitar', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'GRO', comoHabilita:'Nueva RTO posterior a la reparación y cargada en GRO', quienRehabilita:'Referente operativo / referente de SSA' },
+  { motivo:'Observación de seguridad por elementos de seguridad faltantes o en mal estado', accion:'Solución 5 días (si no se soluciona, se inhabilita)', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Evidencia de reparación', quienRehabilita:'Referente operativo / referente de SSA' },
+];
+
+const DECISION_MAQUINARIA = [
+  { motivo:'Inspección técnica con observaciones', accion:'Inhabilitar', donde:'GRO', quienSolicita:'Supervisor de SSA', comoSolicita:'Pedido por correo electrónico a control documentario del sitio y operativo involucrado', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Nueva RTO posterior a la reparación y cargada en GRO', quienRehabilita:'Referente operativo / referente de SSA' },
+];
+
+const DECISION_EMPRESAS = [
+  { motivo:'Inhabilitaciones recurrentes (más de 3 veces cada 6 meses)', accion:'No conformidad', donde:'SAP/FIORI', quienSolicita:'Supervisor de SSA', comoSolicita:'Notificación por mail al referente operativo del vehículo (PAE | Contratista) con desvío', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Plan de acción focalizado en mejorar la performance de manejo', quienRehabilita:'Referente operativo / referente de SSA' },
+  { motivo:'Circulación de vehículos pesados en horarios restringidos', accion:'No conformidad', donde:'SAP/FIORI', quienSolicita:'Supervisor de SSA', comoSolicita:'Notificación por mail al referente operativo del vehículo (PAE | Contratista) con desvío', quienAprueba:'VP, Gerente, Líderes operativo del servicio', quienInforma:'Referente operativo / referente de SSA', comoHabilita:'Plan de acción focalizado en mejorar la performance de manejo', quienRehabilita:'Referente operativo / referente de SSA' },
+];
+
+function decisionRow(d) {
+  return `<tr>
+    <td>${d.motivo}</td><td>${d.accion}</td><td>${d.donde}</td><td>${d.quienSolicita}</td>
+    <td>${d.comoSolicita}</td><td>${d.quienAprueba}</td><td>${d.quienInforma}</td>
+    <td>${d.comoHabilita}</td><td>${d.quienRehabilita}</td>
+  </tr>`;
+}
+
+function openDecisionModal() {
+  document.getElementById('decisionTableConductor').innerHTML = DECISION_CONDUCTOR.map(decisionRow).join('');
+  document.getElementById('decisionTableVehiculo').innerHTML = DECISION_VEHICULO.map(decisionRow).join('');
+  document.getElementById('decisionTableMaquinaria').innerHTML = DECISION_MAQUINARIA.map(decisionRow).join('');
+  document.getElementById('decisionTableEmpresas').innerHTML = DECISION_EMPRESAS.map(decisionRow).join('');
+  document.getElementById('decisionModalOverlay').classList.remove('hidden');
+}
+function closeDecisionModal() {
+  document.getElementById('decisionModalOverlay').classList.add('hidden');
+}
+
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
 function renderRepeatOffenders(rows, months) {
   const offenders = computeRepeatOffenders(rows, months);
   const el = document.getElementById('repeatOffendersWrap');
   if (!offenders.length) {
-    el.innerHTML = '<div class="empty-state" style="padding:24px;">Sin choferes en Alto/Moderado durante 2 o más meses seguidos 🎉</div>';
+    el.innerHTML = '<div class="empty-state" style="padding:24px;">Sin choferes reincidentes (2+ meses seguidos en Alto/Moderado, o 3+ meses en Alto alternados en el año) 🎉</div>';
     return;
   }
   el.innerHTML = `<div class="repeat-list">${offenders.map(o => {
-    const anioMesHasta = o.run[o.run.length - 1].m;
+    const lastConsec = o.consecutivo ? o.consecutivo[o.consecutivo.length - 1].m : 0;
+    const lastAlt = o.alternado ? o.alternado[o.alternado.length - 1].m : 0;
+    const anioMesHasta = Math.max(lastConsec, lastAlt);
     const episodio = state.acciones.filter(a => String(a.cuil) === String(o.cuil) && a.anio_mes_hasta === anioMesHasta)
       .sort((a,b) => new Date(a.creado_en) - new Date(b.creado_en));
     const uid = 'acc_' + o.cuil;
@@ -1053,10 +1195,20 @@ function renderRepeatOffenders(rows, months) {
           <div class="nm">${o.nombre||''}</div>
           <div class="ct">${o.contrato||'Sin contrato'} · CUIL ${o.cuil}</div>
         </div>
-        <div class="streak">
-          ${o.run.map(step => `<div class="repeat-dot"><span class="badge ${RISK_BADGE[step.cat]}">${step.cat==='Moderado'?'Mod':step.cat}</span><span class="m">${fmtMonth(step.m)}</span></div>`).join('<span style="color:var(--text-faint);">→</span>')}
+        <div class="motivos">
+          ${o.consecutivo ? `
+          <div class="motivo-row">
+            <span class="motivo-label">Racha seguida</span>
+            <div class="streak">${o.consecutivo.map(step => `<div class="repeat-dot"><span class="badge ${RISK_BADGE[step.cat]}">${step.cat==='Moderado'?'Mod':step.cat}</span><span class="m">${fmtMonth(step.m)}</span></div>`).join('<span style="color:var(--text-faint);">→</span>')}</div>
+            <div class="repeat-count">${o.consecutivo.length} meses</div>
+          </div>` : ''}
+          ${o.alternado ? `
+          <div class="motivo-row">
+            <span class="motivo-label">Alto alternado (año rolling)</span>
+            <div class="streak">${o.alternado.map(step => `<div class="repeat-dot"><span class="badge ${RISK_BADGE[step.cat]}">${step.cat}</span><span class="m">${fmtMonth(step.m)}</span></div>`).join('<span style="color:var(--text-faint);">·</span>')}</div>
+            <div class="repeat-count">${o.alternado.length} meses</div>
+          </div>` : ''}
         </div>
-        <div class="repeat-count">${o.run.length} meses</div>
       </div>
       <div class="repeat-row-bottom">
         ${(() => {
