@@ -1588,7 +1588,7 @@ async function confirmImport() {
         q_exceso_vel:r.q_exceso_vel, vel_extrema_min:r.vel_extrema_min, q_vel_extrema:r.q_vel_extrema,
         q_infraccion_vel:r.q_infraccion_vel, q_dias_conduccion:r.q_dias_conduccion, empresa_actual:r.empresa_actual, contrato:r.contrato
       }));
-      await sb('icr_registros', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(chunk) });
+      await sb('icr_registros?on_conflict=cuil,anio_mes', { method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(chunk) });
       imported += chunk.length;
     }
     await sb('icr_importaciones', { method:'POST', headers:{'Prefer':'return=minimal'},
