@@ -1500,9 +1500,15 @@ function parseRows(rawRows, filename) {
 
   if (!parsed.length) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">No se encontraron filas válidas (revisá columnas CUIL y Año-Mes).</div>'; return; }
 
-  state.pendingImport = { rows: parsed, filename, month: firstMonth };
-  statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">Archivo leído: ${parsed.length} filas${mixedMonthWarning ? ' — <b>atención: hay más de un Año-Mes en el archivo</b>' : ''}.</div>`;
-  renderImportPreview(mixedMonthWarning, unmatched);
+  // Dedupe por cuil+anio_mes (a veces el archivo del GPS trae al mismo chofer repetido en el mes) — se queda con la última.
+  const dedupMap = new Map();
+  parsed.forEach(r => dedupMap.set(r.cuil + '_' + r.anio_mes, r));
+  const parsedDedup = Array.from(dedupMap.values());
+  const duplicadosRemovidos = parsed.length - parsedDedup.length;
+
+  state.pendingImport = { rows: parsedDedup, filename, month: firstMonth };
+  statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">Archivo leído: ${parsedDedup.length} filas${mixedMonthWarning ? ' — <b>atención: hay más de un Año-Mes en el archivo</b>' : ''}${duplicadosRemovidos ? ` — se descartaron <b>${duplicadosRemovidos} filas duplicadas</b> (mismo chofer y mes repetido, se quedó con la última)` : ''}.</div>`;
+  renderImportPreview(mixedMonthWarning, unmatched.filter(r => parsedDedup.includes(r)));
 }
 
 function renderImportPreview(mixedMonthWarning, unmatched) {
