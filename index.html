@@ -597,6 +597,10 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
             <button class="ps-btn ps-btn-primary" onclick="saveContratos()">Guardar selección</button>
             <span id="contratosSaveMsg" style="margin-left:12px;font-size:13px;color:var(--risk-bajo);"></span>
           </div>
+          <hr class="modal-note" style="border:none;border-top:1px solid var(--panel-border);margin:20px 0;">
+          <div class="panel-sub" style="margin-bottom:10px;">Los contratos que no tienen ningún chofer cargado en la nómina no aportan nada al panel — podés limpiarlos.</div>
+          <button class="ps-btn ps-btn-ghost" onclick="eliminarContratosSinChoferes()">🗑️ Eliminar contratos sin choferes</button>
+          <div id="limpiarContratosStatus" style="margin-top:12px;"></div>
         </div>
       </section>
 
@@ -964,10 +968,11 @@ function sparklineSVG(values, color) {
 }
 
 function renderContractCards(monthRows, allFilteredRows, months) {
-  const contractsInPlay = orderedContratos(state.contratos.map(c => c.contrato).filter(name => state.selectedContratos.has(name)));
+  const contractsInPlay = orderedContratos(state.contratos.map(c => c.contrato).filter(name => state.selectedContratos.has(name)))
+    .filter(name => contractRows(name, monthRows).length > 0);
   const el = document.getElementById('contractCards');
 
-  if (!contractsInPlay.length) { el.innerHTML = '<div class="empty-state">Elegí al menos un contrato en la barra lateral.</div>'; return; }
+  if (!contractsInPlay.length) { el.innerHTML = '<div class="empty-state">Sin conductores evaluados para los contratos seleccionados en este período.</div>'; return; }
 
   el.innerHTML = contractsInPlay.map(name => {
     const rowsC = contractRows(name, monthRows);
@@ -1639,6 +1644,34 @@ async function saveContratos() {
     await loadAll(false);
   } catch (e) { alert('Error guardando: ' + e.message); }
   finally { showLoader(false); }
+}
+
+async function eliminarContratosSinChoferes() {
+  const statusEl = document.getElementById('limpiarContratosStatus');
+  const counts = {};
+  state.personal.forEach(p => { if (p.contrato) counts[p.contrato] = (counts[p.contrato] || 0) + 1; });
+
+  const vacios = state.contratos
+    .map(c => c.contrato)
+    .filter(name => name !== ACUMULADO_KEY && !(counts[name] > 0));
+
+  if (!vacios.length) {
+    statusEl.innerHTML = '<div class="ps-alert ps-alert-info">No hay contratos vacíos — todos tienen al menos un chofer en la nómina.</div>';
+    return;
+  }
+
+  if (!confirm(`Se van a eliminar ${vacios.length} contrato(s) sin choferes:\n\n${vacios.join('\n')}\n\n¿Confirmás?`)) return;
+
+  showLoader(true);
+  try {
+    await sb('icr_contratos_filtro?contrato=in.(' + vacios.map(v => encodeURIComponent(v)).join(',') + ')', { method: 'DELETE', headers: { 'Prefer': 'return=minimal' } });
+    statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">✓ Se eliminaron ${vacios.length} contrato(s): ${vacios.join(', ')}</div>`;
+    await loadAll(true);
+  } catch (e) {
+    statusEl.innerHTML = `<div class="ps-alert ps-alert-danger">Error al eliminar: ${e.message}</div>`;
+  } finally {
+    showLoader(false);
+  }
 }
 
 /* ============================================================
