@@ -572,6 +572,19 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
           </div>
           <div id="nominaTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
         </div>
+
+        <div class="panel">
+          <div class="panel-title">Cotejar nómina actualizada</div>
+          <div class="panel-sub">Subí el archivo de nómina nuevo (Legajo, Apellido y nombre, CUIT, Base, Contrato) y lo comparo con lo que ya está cargado: altas, bajas y cambios de base/contrato.</div>
+          <div class="dropzone" id="dropzoneNomina" onclick="document.getElementById('fileInputNomina').click()">
+            <input type="file" id="fileInputNomina" accept=".xlsx,.xls,.csv" onchange="handleNominaFile(this.files[0])">
+            <div style="font-size:30px;margin-bottom:8px;">⇪</div>
+            <div><b>Hacé clic o arrastrá el archivo acá</b></div>
+            <div style="font-size:12px;margin-top:4px;color:var(--text-faint);">.xlsx, .xls o .csv</div>
+          </div>
+          <div id="nominaCompareStatus" style="margin-top:14px;"></div>
+        </div>
+        <div id="nominaComparePreview"></div>
       </section>
 
       <!-- ================= CONTRATOS ================= -->
@@ -698,7 +711,8 @@ const state = {
   focusContrato: null,
   trendMode: 'categoria',
   sortKey: 'icr_categoria', sortDir: 1,
-  pendingImport: null
+  pendingImport: null,
+  pendingNominaCompare: null
 };
 
 const ACTION_TYPES = ['Feedback', 'Formulario cliente', 'Recapacitación', 'Inhabilitación'];
@@ -739,6 +753,7 @@ async function boot() {
     renderDashboard();
   }));
   setupDropzone();
+  setupDropzoneNomina();
   await loadAll(false);
 }
 
@@ -1339,7 +1354,195 @@ async function guardarContratoPersona(cuit) {
   }
 }
 
-/* ---- driver table ---- */
+/* ---- cotejar nómina actualizada ---- */
+function setupDropzoneNomina() {
+  const dz = document.getElementById('dropzoneNomina');
+  if (!dz) return;
+  ['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleNominaFile(f); });
+}
+
+function handleNominaFile(file) {
+  if (!file) return;
+  const statusEl = document.getElementById('nominaCompareStatus');
+  statusEl.innerHTML = `<div class="ps-alert ps-alert-info">Leyendo ${file.name}…</div>`;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+      parseNominaRows(rows, file.name);
+    } catch (err) {
+      statusEl.innerHTML = `<div class="ps-alert ps-alert-danger">No se pudo leer el archivo: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseNominaRows(rawRows, filename) {
+  const statusEl = document.getElementById('nominaCompareStatus');
+  if (!rawRows.length) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">Archivo vacío.</div>'; return; }
+
+  // Buscar la fila de encabezado (Legajo / CUIT / Contrato pueden no estar en la fila 1)
+  let headerIdx = rawRows.findIndex(r => r && r.some(v => normHeader(v).includes('cuit')));
+  if (headerIdx === -1) headerIdx = 0;
+  const header = rawRows[headerIdx].map(normHeader);
+  const dataRows = rawRows.slice(headerIdx + 1);
+
+  const colLegajo = header.findIndex(h => h.includes('legajo'));
+  const colNombre = header.findIndex(h => h.includes('apellido') || h.includes('nombre'));
+  const colCuit = header.findIndex(h => h.includes('cuit'));
+  const colBase = header.findIndex(h => h.includes('base'));
+  const colContrato = header.findIndex(h => h.includes('contrato'));
+
+  if (colCuit === -1) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">No encontré una columna de CUIT en el archivo.</div>'; return; }
+
+  const parsed = [];
+  dataRows.forEach(row => {
+    if (!row || row.every(v => v === null || v === '')) return;
+    const cuit = row[colCuit] ? parseInt(row[colCuit]) : null;
+    if (!cuit) return;
+    parsed.push({
+      legajo: colLegajo > -1 ? row[colLegajo] : null,
+      nombre: colNombre > -1 ? row[colNombre] : null,
+      cuit,
+      base: colBase > -1 ? row[colBase] : null,
+      contrato: colContrato > -1 ? row[colContrato] : null,
+    });
+  });
+
+  if (!parsed.length) { statusEl.innerHTML = '<div class="ps-alert ps-alert-danger">No se encontraron filas válidas.</div>'; return; }
+
+  statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">Archivo leído: ${parsed.length} choferes.</div>`;
+  compareNomina(parsed, filename);
+}
+
+function compareNomina(nuevaLista, filename) {
+  const nuevaByCuit = {};
+  nuevaLista.forEach(p => nuevaByCuit[p.cuit] = p);
+  const actualByCuit = {};
+  state.personal.forEach(p => actualByCuit[p.cuit] = p);
+
+  const altas = [];
+  const cambios = [];
+  const bajas = [];
+
+  nuevaLista.forEach(p => {
+    const actual = actualByCuit[p.cuit];
+    if (!actual) {
+      altas.push(p);
+    } else {
+      const diffs = [];
+      if ((actual.contrato || '') !== (p.contrato || '')) diffs.push({ campo: 'Contrato', antes: actual.contrato || '—', despues: p.contrato || '—' });
+      if ((actual.base || '') !== (p.base || '')) diffs.push({ campo: 'Base', antes: actual.base || '—', despues: p.base || '—' });
+      if (diffs.length) cambios.push({ cuit: p.cuit, nombre: p.nombre || actual.nombre, diffs, nuevo: p });
+    }
+  });
+
+  state.personal.forEach(p => {
+    if (!nuevaByCuit[p.cuit]) bajas.push(p);
+  });
+
+  state.pendingNominaCompare = { altas, cambios, bajas, filename };
+  renderNominaComparePreview();
+}
+
+function renderNominaComparePreview() {
+  const { altas, cambios, bajas, filename } = state.pendingNominaCompare;
+  const el = document.getElementById('nominaComparePreview');
+
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-title">Resultado del cotejo — ${filename}</div>
+      <div class="kpi-strip" style="margin-bottom:16px;">
+        <div class="kpi-mini"><div class="k">Altas</div><div class="v" style="color:var(--risk-bajo)">${altas.length}</div></div>
+        <div class="kpi-mini"><div class="k">Cambios</div><div class="v amber">${cambios.length}</div></div>
+        <div class="kpi-mini"><div class="k">Bajas</div><div class="v" style="color:var(--risk-alto)">${bajas.length}</div></div>
+      </div>
+
+      ${altas.length ? `
+      <h4 class="modal-section-title" style="color:var(--risk-bajo);">Altas — nuevos en la nómina</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data"><thead><tr><th>Legajo</th><th>Chofer</th><th>CUIT</th><th>Base</th><th>Contrato</th></tr></thead>
+        <tbody>${altas.map(p => `<tr><td>${p.legajo||''}</td><td class="name-cell">${p.nombre||''}</td><td>${p.cuit}</td><td>${p.base||''}</td><td>${p.contrato||''}</td></tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${cambios.length ? `
+      <h4 class="modal-section-title" style="color:var(--amber2);">Cambios de base/contrato</h4>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data"><thead><tr><th>Chofer</th><th>CUIT</th><th>Campo</th><th>Antes</th><th>Después</th></tr></thead>
+        <tbody>${cambios.map(c => c.diffs.map((d,i) => `<tr>
+          <td class="name-cell">${i===0 ? c.nombre||'' : ''}</td><td>${i===0 ? c.cuit : ''}</td>
+          <td>${d.campo}</td><td>${d.antes}</td><td style="color:var(--amber2);font-weight:700;">${d.despues}</td>
+        </tr>`).join('')).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${bajas.length ? `
+      <h4 class="modal-section-title" style="color:var(--risk-alto);">Bajas — están cargados pero no aparecen en el archivo nuevo</h4>
+      <div class="panel-sub">Tildá los que quieras eliminar de la nómina. Los que dejes sin tildar quedan como están (el histórico de meses ya cargados no se toca en ningún caso).</div>
+      <div class="table-wrap" style="margin-bottom:20px;">
+        <table class="data"><thead><tr><th></th><th>Chofer</th><th>CUIT</th><th>Contrato</th></tr></thead>
+        <tbody>${bajas.map(p => `<tr>
+          <td><input type="checkbox" class="chk_baja_nomina" value="${p.cuit}"></td>
+          <td class="name-cell">${p.nombre||''}</td><td>${p.cuit}</td><td>${p.contrato||''}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
+      ${(!altas.length && !cambios.length && !bajas.length) ? '<div class="empty-state">La nómina está igual, no hay diferencias.</div>' : ''}
+
+      <button class="ps-btn ps-btn-primary" onclick="aplicarCotejoNomina()">✓ Aplicar cambios</button>
+      <button class="ps-btn ps-btn-ghost" onclick="cancelarCotejoNomina()">Cancelar</button>
+      <div id="nominaCompareConfirmStatus" style="margin-top:14px;"></div>
+    </div>`;
+}
+
+function cancelarCotejoNomina() {
+  state.pendingNominaCompare = null;
+  document.getElementById('nominaComparePreview').innerHTML = '';
+  document.getElementById('nominaCompareStatus').innerHTML = '';
+  document.getElementById('fileInputNomina').value = '';
+}
+
+async function aplicarCotejoNomina() {
+  const { altas, cambios, bajas } = state.pendingNominaCompare;
+  const bajasMarcadas = Array.from(document.querySelectorAll('.chk_baja_nomina:checked')).map(c => parseInt(c.value));
+  const statusEl = document.getElementById('nominaCompareConfirmStatus');
+
+  const totalAcciones = altas.length + cambios.length + bajasMarcadas.length;
+  if (!totalAcciones) { statusEl.innerHTML = '<div class="ps-alert ps-alert-info">Nada para aplicar.</div>'; return; }
+  if (!confirm(`Vas a aplicar: ${altas.length} altas, ${cambios.length} cambios y ${bajasMarcadas.length} bajas. ¿Confirmás?`)) return;
+
+  statusEl.innerHTML = '<div class="ps-alert ps-alert-info">Aplicando…</div>';
+  showLoader(true);
+  try {
+    const upserts = [
+      ...altas.map(p => ({ cuit: p.cuit, legajo: p.legajo, nombre: p.nombre, base: p.base, contrato: p.contrato })),
+      ...cambios.map(c => ({ cuit: c.nuevo.cuit, legajo: c.nuevo.legajo, nombre: c.nuevo.nombre, base: c.nuevo.base, contrato: c.nuevo.contrato }))
+    ];
+    if (upserts.length) {
+      await sb('icr_personal', { method: 'POST', headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(upserts) });
+    }
+    if (bajasMarcadas.length) {
+      await sb('icr_personal?cuit=in.(' + bajasMarcadas.join(',') + ')', { method: 'DELETE', headers: { 'Prefer': 'return=minimal' } });
+    }
+
+    state.personal = await sb('icr_personal?select=cuit,nombre,contrato,base') || [];
+    state.personalByCuit = {};
+    state.personal.forEach(p => state.personalByCuit[p.cuit] = p);
+
+    statusEl.innerHTML = `<div class="ps-alert ps-alert-ok">✓ Listo: ${altas.length} altas, ${cambios.length} cambios, ${bajasMarcadas.length} bajas aplicadas.</div>`;
+    cancelarCotejoNomina();
+    renderNominaTab();
+  } catch (e) {
+    statusEl.innerHTML = `<div class="ps-alert ps-alert-danger">Error al aplicar: ${e.message}</div>`;
+  } finally {
+    showLoader(false);
+  }
+}
+
+
 function renderDriverTable() {
   const monthRows = rowsForSelectedMonth(filteredRegistros());
   const search = (document.getElementById('searchDriver').value || '').toLowerCase().trim();
