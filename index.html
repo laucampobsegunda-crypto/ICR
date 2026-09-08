@@ -217,6 +217,9 @@ table.data th {
 table.data th:hover { color: var(--text); }
 table.data td { padding: 9px 14px; border-bottom: 1px solid var(--panel-border); white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; }
 table.data td.name-cell { font-family: var(--font-body); font-size: 13px; }
+.evolucion-table th, .evolucion-table td { min-width: 70px; }
+.evolucion-table th:first-child, .evolucion-table td:first-child { min-width: 160px; }
+.evolucion-table th:nth-child(2), .evolucion-table td:nth-child(2) { min-width: 140px; }
 table.data tr:hover td { background: rgba(255,255,255,0.02); }
 table.data tr.row-dispersion td { opacity: 0.55; }
 table.data tr.row-dispersion:hover td { opacity: 0.85; }
@@ -352,6 +355,7 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
 
     <nav class="nav">
       <button class="nav-item active" data-view="dashboard"><span class="ic">◈</span> Panel general</button>
+      <button class="nav-item" data-view="evolucion"><span class="ic">📈</span> Evolución mensual</button>
       <button class="nav-item" data-view="import"><span class="ic">⇪</span> Importar mes</button>
       <button class="nav-item" data-view="acciones"><span class="ic">📋</span> Acciones</button>
       <button class="nav-item" data-view="nomina"><span class="ic">🧑‍✈️</span> Nómina</button>
@@ -479,6 +483,36 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
             </div>
             <div id="driverTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= EVOLUCION MENSUAL ================= -->
+      <section class="ps-view" id="view-evolucion">
+        <div class="panel">
+          <div class="panel-title">Evolución mensual por chofer</div>
+          <div class="panel-sub">Categoría de riesgo de cada conductor, mes a mes (contratos seleccionados en la barra lateral)</div>
+          <div class="table-toolbar" style="margin-bottom:14px;">
+            <div class="f" style="flex:2;min-width:220px;">
+              <input class="ps-input" id="searchEvolucion" placeholder="Buscar por nombre o CUIL…" oninput="renderEvolucionTab()">
+            </div>
+            <div class="f">
+              <select class="ps-select" id="filterContratoEvolucion" onchange="renderEvolucionTab()"><option value="">Todos los contratos</option></select>
+            </div>
+            <div class="f">
+              <select class="ps-select" id="filterRiskEvolucion" onchange="renderEvolucionTab()">
+                <option value="">Cualquier categoría</option>
+                <option value="Alto">Tuvo Alto alguna vez</option>
+                <option value="Moderado">Tuvo Moderado alguna vez</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data evolucion-table" id="evolucionTable">
+              <thead><tr id="evolucionTableHead"></tr></thead>
+              <tbody id="evolucionTableBody"></tbody>
+            </table>
+          </div>
+          <div id="evolucionTableCount" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
         </div>
       </section>
 
@@ -764,12 +798,12 @@ async function boot() {
 function switchView(view) {
   document.querySelectorAll('.nav-item').forEach(t => t.classList.toggle('active', t.dataset.view === view));
   document.querySelectorAll('.ps-view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
-  const titles = { dashboard: 'Panel general', import: 'Importar mes', acciones: 'Acciones', nomina: 'Nómina', contratos: 'Contratos' };
-  const subs = { dashboard: 'Desempeño de conductores por contrato y período', import: 'Cargar el archivo mensual del sistema de GPS', acciones: 'Historial de acciones sobre choferes reincidentes', nomina: 'Asignar o corregir el contrato de cada chofer', contratos: 'Definir qué contratos entran al panel' };
+  const titles = { dashboard: 'Panel general', evolucion: 'Evolución mensual', import: 'Importar mes', acciones: 'Acciones', nomina: 'Nómina', contratos: 'Contratos' };
+  const subs = { dashboard: 'Desempeño de conductores por contrato y período', evolucion: 'Categoría de riesgo de cada chofer, mes a mes', import: 'Cargar el archivo mensual del sistema de GPS', acciones: 'Historial de acciones sobre choferes reincidentes', nomina: 'Asignar o corregir el contrato de cada chofer', contratos: 'Definir qué contratos entran al panel' };
   document.getElementById('topbarTitle').textContent = titles[view];
   document.getElementById('topbarSub').textContent = subs[view];
   document.getElementById('monthBlock').classList.toggle('hidden', view !== 'dashboard');
-  document.getElementById('contractBlock').classList.toggle('hidden', view !== 'dashboard');
+  document.getElementById('contractBlock').classList.toggle('hidden', view !== 'dashboard' && view !== 'evolucion');
 }
 
 async function loadAll(manual) {
@@ -797,6 +831,7 @@ async function loadAll(manual) {
     renderDashboard();
     renderAccionesTab();
     renderNominaTab();
+    renderEvolucionTab();
   } catch (e) {
     console.error(e);
     alert('Error cargando datos de Supabase: ' + e.message);
@@ -859,12 +894,14 @@ function toggleContratoChip(name) {
   renderContractChips();
   populateMonthSelect();
   renderDashboard();
+  renderEvolucionTab();
 }
 function toggleAllContratos(val) {
   state.selectedContratos = val ? new Set(state.contratos.map(c => c.contrato)) : new Set();
   renderContractChips();
   populateMonthSelect();
   renderDashboard();
+  renderEvolucionTab();
 }
 
 function renderSidebarStats() {
@@ -1357,6 +1394,71 @@ async function guardarContratoPersona(cuit) {
   } finally {
     showLoader(false);
   }
+}
+
+/* ---- evolución mensual (pivot chofer x mes) ---- */
+function populateContratoEvolucionSelect() {
+  const sel = document.getElementById('filterContratoEvolucion');
+  if (!sel) return;
+  const prev = sel.value;
+  const contracts = orderedContratos(state.contratos.map(c => c.contrato));
+  sel.innerHTML = '<option value="">Todos los contratos</option>' + contracts.map(c => `<option value="${c}">${c === ACUMULADO_KEY ? '∑ ACUMULADO' : c}</option>`).join('');
+  sel.value = prev;
+}
+
+function renderEvolucionTab() {
+  const head = document.getElementById('evolucionTableHead');
+  const body = document.getElementById('evolucionTableBody');
+  if (!head || !body) return;
+  populateContratoEvolucionSelect();
+
+  const rows = filteredRegistros();
+  const months = availableMonths();
+  const search = (document.getElementById('searchEvolucion').value || '').toLowerCase().trim();
+  const contratoFilter = document.getElementById('filterContratoEvolucion').value;
+  const riskFilter = document.getElementById('filterRiskEvolucion').value;
+
+  head.innerHTML = `<th style="position:sticky;left:0;z-index:2;background:var(--panel-2);">Chofer</th><th>Contrato</th>` +
+    months.map(m => `<th style="text-align:center;">${fmtMonth(m)}</th>`).join('');
+
+  if (!months.length) {
+    body.innerHTML = `<tr><td colspan="2" style="color:var(--text-faint);">Sin datos</td></tr>`;
+    document.getElementById('evolucionTableCount').textContent = '';
+    return;
+  }
+
+  const byDriver = {};
+  rows.forEach(r => {
+    if (contratoFilter) {
+      const match = contratoFilter === ACUMULADO_KEY ? ACUMULADO_SOURCES.includes(r.contrato) : r.contrato === contratoFilter;
+      if (!match) return;
+    }
+    if (!byDriver[r.cuil]) byDriver[r.cuil] = { nombre: r.apellido_nombre, contrato: r.contrato, cuil: r.cuil, byMonth: {} };
+    byDriver[r.cuil].byMonth[r.anio_mes] = r;
+    byDriver[r.cuil].nombre = r.apellido_nombre;
+    byDriver[r.cuil].contrato = r.contrato;
+  });
+
+  let drivers = Object.values(byDriver).filter(d => {
+    if (search && !(String(d.nombre||'').toLowerCase() + ' ' + String(d.cuil||'')).includes(search)) return false;
+    if (riskFilter && !Object.values(d.byMonth).some(r => r.icr_categoria === riskFilter)) return false;
+    return true;
+  });
+  drivers.sort((a,b) => String(a.nombre||'').localeCompare(String(b.nombre||'')));
+
+  body.innerHTML = drivers.map(d => `
+    <tr>
+      <td class="name-cell" style="position:sticky;left:0;z-index:1;background:var(--panel-2);">${d.nombre||''}</td>
+      <td class="name-cell">${d.contrato||'—'}</td>
+      ${months.map(m => {
+        const r = d.byMonth[m];
+        if (!r) return `<td style="text-align:center;color:var(--text-faint);">—</td>`;
+        const dispTag = r.es_dispersion ? ' style="opacity:.5;" title="Marcado como dispersión"' : '';
+        return `<td style="text-align:center;"${dispTag}><span class="badge ${RISK_BADGE[r.icr_categoria]||'badge-gray'}">${r.icr_categoria==='Moderado'?'Mod':(r.icr_categoria||'—')}</span></td>`;
+      }).join('')}
+    </tr>`).join('') || `<tr><td colspan="${2+months.length}" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin resultados</td></tr>`;
+
+  document.getElementById('evolucionTableCount').textContent = drivers.length + ' choferes · ' + months.length + ' meses';
 }
 
 /* ---- cotejar nómina actualizada ---- */
