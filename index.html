@@ -476,6 +476,7 @@ table.data tr.row-dispersion:hover td { opacity: 0.85; }
                     <th data-key="q_incidentes">Incidentes</th>
                     <th data-key="q_dias_conduccion">Días cond.</th>
                     <th>Dispersión</th>
+                    <th>Acción (Alto/Moderado)</th>
                   </tr>
                 </thead>
                 <tbody id="driverTableBody"></tbody>
@@ -1158,6 +1159,49 @@ function closeDecisionModal() {
 
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
+function renderInlineAccionCell(r) {
+  const existentes = state.acciones.filter(a => String(a.cuil) === String(r.cuil) && a.anio_mes_hasta === r.anio_mes);
+  const resumen = existentes.length
+    ? `<span class="badge badge-gray" title="${existentes.map(a => a.accion + ' (' + fmtFecha(a.creado_en) + ')').join(' · ')}">${existentes.length} acc.</span>`
+    : '';
+  return `
+    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+      ${resumen}
+      <select class="ps-select" id="accSelTbl_${r.id}" style="min-width:96px;font-size:11px;padding:4px 6px;">
+        <option value="">Acción…</option>
+        ${ACTION_TYPES.map(a => `<option value="${a}">${a}</option>`).join('')}
+      </select>
+      <input type="date" class="ps-input" id="accDateTbl_${r.id}" value="${todayISO()}" style="width:112px;font-size:11px;padding:4px 6px;">
+      <button class="ps-btn ps-btn-ghost" style="padding:4px 9px;font-size:11px;" onclick="registrarAccionDesdeTabla(${r.id})">✓</button>
+    </div>`;
+}
+
+async function registrarAccionDesdeTabla(id) {
+  const rec = state.registros.find(r => r.id === id);
+  if (!rec) return;
+  const sel = document.getElementById('accSelTbl_' + id);
+  const dateEl = document.getElementById('accDateTbl_' + id);
+  const accion = sel.value;
+  const fecha = dateEl.value;
+  if (!accion) { alert('Elegí qué acción se tomó.'); return; }
+  if (!fecha) { alert('Elegí la fecha.'); return; }
+  showLoader(true);
+  try {
+    await sb('icr_acciones', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify([{ cuil: rec.cuil, apellido_nombre: rec.apellido_nombre, contrato: rec.contrato, accion, anio_mes_hasta: rec.anio_mes, creado_en: fecha + 'T12:00:00' }])
+    });
+    state.acciones = await sb('icr_acciones?select=*&order=creado_en.desc') || [];
+    renderAccionesTab();
+    renderDriverTable();
+  } catch (e) {
+    alert('No se pudo registrar la acción: ' + e.message);
+  } finally {
+    showLoader(false);
+  }
+}
+
 function renderRepeatOffenders(rows, months) {
   const cortLabel = months.length ? fmtMonth(months[months.length-1]) : '—';
   document.getElementById('repeatOffendersSub').textContent =
@@ -1692,7 +1736,8 @@ function renderDriverTable() {
           <span>${r.es_dispersion ? 'Marcado' : 'Marcar'}</span>
         </label>
       </td>
-    </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin resultados</td></tr>`;
+      <td>${(!r.es_dispersion && (r.icr_categoria==='Alto'||r.icr_categoria==='Moderado')) ? renderInlineAccionCell(r) : '<span style="color:var(--text-faint);">—</span>'}</td>
+    </tr>`).join('') || `<tr><td colspan="10" style="text-align:center;color:var(--text-faint);padding:26px;font-family:var(--font-body);">Sin resultados</td></tr>`;
 
   document.getElementById('tableSub').textContent = fmtMonth(state.selectedMonth) + (contratoFilter ? ' · ' + contratoFilter : '');
   document.getElementById('driverTableCount').textContent = rows.length + ' de ' + monthRows.length + ' choferes';
