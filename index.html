@@ -788,7 +788,7 @@ async function boot() {
     document.querySelectorAll('#trendToggle .toggle-btn').forEach(b => b.classList.toggle('on', b === btn));
     document.getElementById('trendSub').textContent = state.trendMode === 'categoria'
       ? 'Choferes por categoría de riesgo, todos los meses'
-      : '% de riesgo Moderado + Alto por contrato, todos los meses';
+      : 'Choferes por categoría de riesgo, todos los meses (contrato enfocado)';
     renderDashboard();
   }));
   setupDropzone();
@@ -925,6 +925,10 @@ function setFocusContrato(name) {
   document.getElementById('filterContrato').value = name || '';
   renderContractCardsHighlight();
   renderDriverTable();
+  if (state.trendMode === 'contrato') {
+    const rows = filteredRegistros().filter(r => !r.es_dispersion);
+    renderRiskTrendChart(rows, availableMonths());
+  }
 }
 
 function renderDashboard() {
@@ -1072,18 +1076,16 @@ function renderRiskTrendChart(rows, months) {
     }));
   } else {
     stacked = false;
-    const contracts = orderedContratos(state.contratos.map(c=>c.contrato).filter(c => state.selectedContratos.has(c)));
-    datasets = contracts.map(c => ({
-      label: c === ACUMULADO_KEY ? '∑ ACUMULADO' : c,
-      data: months.map(m => {
-        const rm = contractRows(c, rows.filter(r=>r.anio_mes===m));
-        if (!rm.length) return null;
-        const ma = rm.filter(r=>r.icr_categoria==='Alto'||r.icr_categoria==='Moderado').length;
-        return +(ma/rm.length*100).toFixed(1);
-      }),
-      borderColor: contractColor(c, contracts), backgroundColor: contractColor(c, contracts),
-      tension: 0.35, fill: false, borderWidth: c === ACUMULADO_KEY ? 3.5 : 2.5, pointRadius: 3, pointBackgroundColor: contractColor(c, contracts)
+    const focusName = state.focusContrato;
+    const scopeRows = focusName ? contractRows(focusName, rows) : rows;
+    datasets = RISK_ORDER.map(cat => ({
+      label: cat,
+      data: months.map(m => scopeRows.filter(r => r.anio_mes === m && r.icr_categoria === cat).length),
+      borderColor: RISK_COLOR[cat], backgroundColor: RISK_COLOR[cat],
+      tension: 0.35, fill: false, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: RISK_COLOR[cat]
     }));
+    document.getElementById('trendSub').textContent = 'Choferes por categoría de riesgo, todos los meses' +
+      (focusName ? ` — ${focusName === ACUMULADO_KEY ? '∑ ACUMULADO' : focusName}` : ' (todos los contratos seleccionados)');
   }
 
   chartRiskTrend = new Chart(ctx, {
@@ -1093,7 +1095,7 @@ function renderRiskTrendChart(rows, months) {
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ position:'bottom', labels:{ color:'#a3b0c7', boxWidth:10, font:{size:11} } } },
       scales:{
-        y:{ stacked, beginAtZero:true, ticks:{color:'#7686a2'}, grid:{color:'rgba(255,255,255,0.08)'}, title: !isCategoria ? {display:true,text:'% riesgo',color:'#7686a2'} : undefined },
+        y:{ stacked, beginAtZero:true, ticks:{color:'#7686a2'}, grid:{color:'rgba(255,255,255,0.08)'} },
         x:{ stacked, ticks:{color:'#7686a2'}, grid:{color:'rgba(255,255,255,0.05)'} }
       }
     }
